@@ -32,6 +32,57 @@ interface ExtensionItem {
   version: string;
 }
 
+const agentsList = [
+  {
+    id: "ollama",
+    name: "Local Qwen Agent",
+    provider: "Ollama Local Engine",
+    model: "qwen2.5-coder:7b",
+    latency: "< 50ms (Ultra-Low)",
+    context: "8K Context",
+    offline: true,
+    desc: "Offline-first development core. Fully sandboxed and direct workspace code compilation.",
+    color: "#00d8ff",
+    badge: "Local",
+  },
+  {
+    id: "gemini",
+    name: "Gemini Agent",
+    provider: "Google Gemini Cloud",
+    model: "gemini-1.5-flash",
+    latency: "~1.2s (High-Speed)",
+    context: "1M Context",
+    offline: false,
+    desc: "Massive context expansion, dynamic intent scaling, and rapid token synthesis.",
+    color: "#3279F9",
+    badge: "Cloud API",
+  },
+  {
+    id: "anthropic",
+    name: "Claude Agent",
+    provider: "Anthropic Claude API",
+    model: "claude-3-5-sonnet",
+    latency: "~2.5s (Deep Reasoning)",
+    context: "200K Context",
+    offline: false,
+    desc: "Sophisticated coding swarms, precise structural compliance, and advanced system planning.",
+    color: "#f48771",
+    badge: "Reasoning",
+  },
+  {
+    id: "openai",
+    name: "OpenAI GPT Agent",
+    provider: "OpenAI Endpoint",
+    model: "gpt-4o",
+    latency: "~1.8s (Balanced)",
+    context: "128K Context",
+    offline: false,
+    desc: "Structured schema generation, function calling routines, and balanced logic tasks.",
+    color: "#10a37f",
+    badge: "Balanced",
+  }
+];
+
 export default function NexeraDesktopIDE() {
   const [activePanel, setActivePanel] = useState<"explorer" | "search" | "git" | "run" | "extensions" | "brain" | "viewport" | "settings">("explorer");
   const [activeTask, setActiveTask] = useState("");
@@ -440,6 +491,80 @@ Automated & Manual Testing
       console.error("Failed to load configuration", e);
     } finally {
       setIsLoadingConfig(false);
+    }
+  };
+
+  const handleProviderChange = async (provider: string) => {
+    setConfigProvider(provider);
+    let defaultModel = configModelName;
+    let defaultBaseUrl = configBaseUrl;
+    let defaultMaxTokens = configMaxTokens;
+
+    if (provider === "ollama") {
+      defaultModel = "qwen2.5-coder:7b-instruct-q4_K_M";
+      defaultBaseUrl = "http://127.0.0.1:11434";
+      defaultMaxTokens = 8192;
+    } else if (provider === "gemini") {
+      defaultModel = "gemini-1.5-flash";
+      defaultBaseUrl = "https://generativelanguage.googleapis.com";
+      defaultMaxTokens = 1048576;
+    } else if (provider === "anthropic") {
+      defaultModel = "claude-3-5-sonnet-20241022";
+      defaultBaseUrl = "https://api.anthropic.com";
+      defaultMaxTokens = 8192;
+    } else if (provider === "openai") {
+      defaultModel = "gpt-4o";
+      defaultBaseUrl = "https://api.openai.com/v1";
+      defaultMaxTokens = 4096;
+    }
+
+    setConfigModelName(defaultModel);
+    setConfigBaseUrl(defaultBaseUrl);
+    setConfigMaxTokens(defaultMaxTokens);
+
+    try {
+      const payload = {
+        hardware: {
+          cpu: configCpu,
+          cpu_cores: Number(configCpuCores),
+          ram_gb: Number(configRam),
+          gpu: configGpu,
+          vram_gb: Number(configVram)
+        },
+        model: {
+          provider: provider,
+          name: defaultModel,
+          temperature: Number(configTemp),
+          max_context_tokens: Number(defaultMaxTokens),
+          base_url: defaultBaseUrl
+        },
+        api_keys: {
+          gemini: configGeminiKey,
+          openai: configOpenaiKey,
+          anthropic: configAnthropicKey
+        }
+      };
+
+      const res = await fetch("http://127.0.0.1:8000/api/config/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        addLog({ type: "system", message: `⚙️ Swarm processor preset switched to ${provider.toUpperCase()} (${defaultModel}).` });
+        const freshRes = await fetch("http://127.0.0.1:8000/api/config");
+        if (freshRes.ok) {
+          const data = await freshRes.json();
+          if (data.project) {
+            setConfigVersion(data.project.config_version || 1);
+            setConfigHistory(data.project.config_history || []);
+          }
+        }
+      } else {
+        addLog({ type: "error", message: "❌ Failed to save new model selection to backend core." });
+      }
+    } catch (e) {
+      console.error("Error updating model config", e);
     }
   };
 
@@ -2368,18 +2493,80 @@ Automated & Manual Testing
                 <div className="bg-[#090A0D]/50 border border-[#1E2024] rounded-xl p-3 flex flex-col gap-3 leading-snug">
                   <span className="text-[8px] font-extrabold text-[#3279F9] tracking-wider">SWARM LLM DETAILS</span>
                   
-                  <div className="flex flex-col gap-1">
-                    <label className="text-neutral-500">PROVIDER</label>
-                    <select
-                      value={configProvider}
-                      onChange={(e) => setConfigProvider(e.target.value)}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none focus:border-indigo-500"
-                    >
-                      <option value="ollama">Ollama (Local)</option>
-                      <option value="gemini">Gemini API</option>
-                      <option value="openai">OpenAI API</option>
-                      <option value="anthropic">Anthropic API</option>
-                    </select>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-neutral-500 uppercase tracking-widest font-mono text-[7.5px]">Active Agent Processor</label>
+                    <div className="flex flex-col gap-2.5 mt-1">
+                      {agentsList.map((agent) => {
+                        const isActive = configProvider === agent.id;
+                        return (
+                          <div
+                            key={agent.id}
+                            onClick={() => handleProviderChange(agent.id)}
+                            className={`group relative overflow-hidden rounded-xl border p-3 cursor-pointer transition-all duration-300 flex flex-col gap-2 select-none active:scale-[0.98] ${
+                              isActive
+                                ? "bg-[#090A0D]/90 border-[#3279F9] shadow-[0_0_20px_rgba(50,121,249,0.15)] bg-gradient-to-br from-[#090A0D]/90 to-[#0e1726]/40"
+                                : "bg-[#090A0D]/60 border-[#1E2024] hover:border-neutral-700 hover:bg-[#0c0d12]/80"
+                            }`}
+                          >
+                            {/* Top row: Agent Name, active dot + badge */}
+                            <div className="flex justify-between items-start">
+                              <div className="flex flex-col">
+                                <span className={`text-[10px] font-bold tracking-wider font-mono uppercase transition-colors duration-200 ${isActive ? "text-white" : "text-neutral-400 group-hover:text-neutral-200"}`}>
+                                  {agent.name}
+                                </span>
+                                <span className="text-[7.5px] text-neutral-600 font-bold uppercase tracking-widest mt-0.5">
+                                  {agent.provider}
+                                </span>
+                              </div>
+                              
+                              <div className="flex items-center gap-1.5">
+                                <span className={`w-1.5 h-1.5 rounded-full ${isActive ? "animate-pulse" : ""}`} style={{
+                                  backgroundColor: agent.color,
+                                  boxShadow: isActive ? `0 0 8px ${agent.color}` : "none",
+                                }} />
+                                <span className="text-[7.5px] px-1.5 py-0.5 rounded font-mono font-bold bg-[#16181C] text-neutral-500 uppercase">
+                                  {agent.badge}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Description */}
+                            <p className="text-[8.5px] text-neutral-500 leading-relaxed font-mono select-text">
+                              {agent.desc}
+                            </p>
+
+                            {/* Divider */}
+                            <div className="h-[1px] bg-[#16181C] w-full" />
+
+                            {/* Metrics row */}
+                            <div className="flex justify-between items-center text-[7.5px] font-mono font-bold text-neutral-500 gap-1.5">
+                              <div className="flex items-center gap-1">
+                                <span className="text-neutral-600">⚡</span>
+                                <span>LATENCY:</span>
+                                <span className={isActive ? "text-indigo-400" : "text-neutral-400"}>{agent.latency}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span>📂</span>
+                                <span>LIMIT:</span>
+                                <span className={isActive ? "text-indigo-400" : "text-neutral-400"}>{agent.context}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span style={{ color: agent.offline ? "#10B981" : "#F59E0B" }}>●</span>
+                                <span>{agent.offline ? "OFFLINE" : "CLOUD"}</span>
+                              </div>
+                            </div>
+
+                            {/* Background Glow when Active */}
+                            {isActive && (
+                              <div
+                                className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-5 pointer-events-none blur-2xl animate-pulse"
+                                style={{ background: agent.color }}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div className="flex flex-col gap-1">
@@ -3274,18 +3461,33 @@ Automated & Manual Testing
 
                 {/* Bottom line: Provider Select on Left, Send circular green button on Right */}
                 <div className="flex justify-between items-center px-1">
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-neutral-400 font-bold font-mono">+</span>
-                    <select
-                      value={configProvider}
-                      onChange={(e) => setConfigProvider(e.target.value)}
-                      className="bg-transparent border-none text-[#5F7E97] hover:text-[#3279F9] text-[10px] font-mono focus:outline-none cursor-pointer p-0"
-                    >
-                      <option value="gemini" className="bg-[#090A0D] text-[#E3E3E2]">Gemini 3.5 Flash (High)</option>
-                      <option value="openai" className="bg-[#090A0D] text-[#E3E3E2]">OpenAI GPT-5.5-high</option>
-                      <option value="anthropic" className="bg-[#090A0D] text-[#E3E3E2]">Claude Opus 4.7 Thinking</option>
-                      <option value="ollama" className="bg-[#090A0D] text-[#E3E3E2]">Local Qwen (Offline)</option>
-                    </select>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[9px] text-neutral-600 font-bold font-mono uppercase mr-0.5 select-none">AGENT:</span>
+                    {agentsList.map((agent) => {
+                      const isActive = configProvider === agent.id;
+                      return (
+                        <button
+                          key={agent.id}
+                          type="button"
+                          onClick={() => handleProviderChange(agent.id)}
+                          className={`px-2.5 py-0.5 rounded-full border text-[8.5px] font-bold font-mono transition-all duration-200 flex items-center gap-1.5 active:scale-95 select-none ${
+                            isActive
+                              ? "bg-[#3279F9]/10 border-[#3279F9] text-white shadow-[0_0_8px_rgba(50,121,249,0.15)]"
+                              : "bg-[#090A0D]/40 border-[#1E2024] text-neutral-500 hover:text-neutral-300 hover:border-neutral-700"
+                          }`}
+                          title={`${agent.name} (${agent.model})`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${isActive ? "animate-pulse" : ""}`}
+                            style={{
+                              backgroundColor: agent.color,
+                              boxShadow: isActive ? `0 0 6px ${agent.color}` : "none",
+                            }}
+                          />
+                          <span>{agent.id === "ollama" ? "Local" : agent.id === "anthropic" ? "Claude" : agent.id === "gemini" ? "Gemini" : "OpenAI"}</span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   <button
