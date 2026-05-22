@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Editor from "@monaco-editor/react";
+import { DiffEditor } from "@monaco-editor/react";
 
 const getLanguageFromPath = (path: string | null): string => {
   if (!path) return "plaintext";
@@ -33,6 +34,7 @@ interface LogMessage {
 interface PendingApproval {
   filepath: string;
   content: string;
+  original_content: string;  // empty string if file is new
 }
 
 interface FileNode {
@@ -3348,9 +3350,55 @@ Automated & Manual Testing
                   </div>
                 )}
 
-                {/* Premium Monaco Editor Container */}
+                {/* Premium Monaco Editor / Diff Editor Container */}
                 <div className="flex-1 min-h-0 w-full relative bg-[#1e1e1e] border-t border-neutral-900/40">
                   {activeTab ? (
+                    pendingApproval && pendingApproval.filepath === activeTab ? (
+                      // ─── CTO Diff View: Monaco DiffEditor (old ↔ new) ─────────────────────
+                      <div className="relative h-full w-full flex flex-col">
+                        {/* Diff header banner */}
+                        <div className="h-6 bg-[#252526] border-b border-[#2b2b2b] flex items-center justify-between px-4 shrink-0 select-none">
+                          <div className="flex items-center gap-3 text-[9px] font-mono">
+                            <span className="text-rose-400 font-bold">← ORIGINAL</span>
+                            <span className="text-neutral-600">|</span>
+                            <span className="text-emerald-400 font-bold">PROPOSED →</span>
+                          </div>
+                          <span className="text-[8.5px] font-mono text-[#3279F9] bg-indigo-950/40 border border-indigo-900/30 px-2 py-0.5 rounded">
+                            🛡️ CTO Diff Review — {pendingApproval.filepath}
+                          </span>
+                          <div className="flex items-center gap-1.5 text-[9px] font-mono text-neutral-500">
+                            <span className="bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 rounded">Ctrl+D approve</span>
+                            <span className="bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 rounded">Ctrl+- reject</span>
+                          </div>
+                        </div>
+                        <DiffEditor
+                          height="100%"
+                          theme="vs-dark"
+                          language={getLanguageFromPath(activeTab)}
+                          original={pendingApproval.original_content || ""}
+                          modified={pendingApproval.content}
+                          options={{
+                            fontSize: 12,
+                            lineHeight: 18,
+                            minimap: { enabled: false },
+                            renderSideBySide: true,
+                            readOnly: true,
+                            scrollbar: {
+                              vertical: "visible",
+                              horizontal: "visible",
+                              verticalScrollbarSize: 10,
+                              horizontalScrollbarSize: 10,
+                              useShadows: false
+                            },
+                            fontFamily: "var(--font-mono), Consolas, Monaco, monospace",
+                            wordWrap: "on",
+                            automaticLayout: true,
+                            padding: { top: 12 },
+                          }}
+                        />
+                      </div>
+                    ) : (
+                    // ─── Normal editor ────────────────────────────────────────────────────
                     <Editor
                       height="100%"
                       width="100%"
@@ -3391,6 +3439,7 @@ Automated & Manual Testing
                         insertSpaces: true
                       }}
                     />
+                    )
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-neutral-500 font-mono text-xs">
                       No active document open. Select a file from the explorer pane.

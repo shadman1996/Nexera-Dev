@@ -249,10 +249,22 @@ class Engineer(Agent):
 
         # ───────────────────────────────────────────────────────────
         # CTO INTERRUPT APPROVAL LOCK
+        # Read the current file (if it exists) so the IDE can show
+        # a Monaco DiffEditor with the before/after diff.
         # ───────────────────────────────────────────────────────────
+        full_path_check = os.path.join(os.getcwd(), "workspace", filepath)
+        original_content = ""
+        if os.path.exists(full_path_check):
+            try:
+                with open(full_path_check, "r", encoding="utf-8") as _f:
+                    original_content = _f.read()
+            except Exception:
+                original_content = ""
+
         approval_queue["pending"] = {
             "filepath": filepath,
-            "content": code
+            "content": code,
+            "original_content": original_content   # "" if this is a new file
         }
         approval_queue["status"] = None
         approval_queue["notes"] = ""
