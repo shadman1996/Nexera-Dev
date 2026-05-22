@@ -358,7 +358,8 @@ async def submit_approval(request: Request):
         
     approval_queue["status"] = status
     approval_queue["notes"] = notes
-    
+    approval_queue["pending"] = None  # clear immediately so frontend poll stops showing the banner
+
     await websocket_manager.broadcast({
         "type": "system",
         "message": f"🛡️ CTO submitted approval: {status.upper()}" + (f" - Notes: '{notes}'" if notes else "")

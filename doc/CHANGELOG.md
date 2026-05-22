@@ -4,6 +4,37 @@ All notable changes to the **Nexera OS** platform will be documented in this fil
 
 ---
 
+## [1.6.0] - 2026-05-22
+### Added
+- **Agents Panel**: New activity bar icon and sidebar panel (`activePanel === "agents"`) exposing three provider cards — **Local (Ollama)**, **Gemini** (Google), and **Claude** (Anthropic). Each card shows live status (● ACTIVE / LOCAL / CLOUD), model picker, and API key/URL fields. "SAVE & APPLY" persists config to the backend via the existing `saveConfigToServer` function.
+- **VS Code Dark+ Theme**: Replaced Obsidian-Coal color palette with the Antigravity IDE / VS Code Dark+ palette across `mobile/src/app/page.tsx`:
+  - Activity bar: `#333333`
+  - Sidebar: `#252526`
+  - Main editor background: `#1e1e1e`
+  - Tab bar / terminal headers: `#2d2d30`
+  - Titlebar: `#3c3c3c`
+  - Borders: `#3c3c3c` / `#2b2b2b`
+
+### Verified
+- TypeScript: 0 errors across all source files after `handleDockIconClick` type union extended to include `"agents"`
+
+---
+
+## [1.5.0] - 2026-05-22
+### Added
+- **`requirements-dev.txt`**: Documents test/dev dependencies (`pytest`, `pytest-asyncio`, `aiosqlite`, `sqlalchemy`) separately from runtime deps. Install with `pip install -r requirements-dev.txt`.
+
+### Fixed
+- **SQLAlchemy 2.0 deprecation**: Updated `backend/database.py` to import `declarative_base` from `sqlalchemy.orm` instead of the deprecated `sqlalchemy.ext.declarative`. Tests now run with zero warnings.
+- **Tunnel port mismatch**: Corrected `mobile/launch_tunnel.ps1` and `mobile/launch_tunnel.sh` from port `3001` to `3000` to match the actual Next.js dev server.
+
+### Verified
+- All 7 backend unit tests pass (config, pattern engine, async SQLite DB)
+- Next.js production build compiles cleanly (7 routes, 0 errors)
+- TypeScript: 0 errors across all source files
+
+---
+
 ## [1.4.0] - 2026-05-22
 ### Added
 - **Native Interactive PowerShell Console**: Replaced text buttons and external extension components with a high-fidelity, native-grade PowerShell console shell directly inside both the Next.js client and the Electron wrapper panel.
