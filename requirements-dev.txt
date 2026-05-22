@@ -1,0 +1,15 @@
+# ═══════════════════════════════════════════════════════════
+# NEXERA AUTOMATION OS — Development & Test Dependencies
+# Install with: pip install -r requirements-dev.txt
+# ═══════════════════════════════════════════════════════════
+
+# Runtime deps first
+-r requirements.txt
+
+# Async database support (for SQLAlchemy async engine in tests)
+aiosqlite>=0.20.0
+sqlalchemy>=2.0.0
+
+# Test runner
+pytest>=8.0.0
+pytest-asyncio>=0.23.0

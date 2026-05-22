@@ -1,6 +1,6 @@
 #!/bin/bash
 # Nexera OS PWA Cloudflare Tunnel Launch Script
-# Exposes local port 3001 (Next.js PWA Client) to a secure public URL.
+# Exposes local port 3000 (Next.js PWA Client) to a secure public URL.
 
 echo "--------------------------------------------------------"
 echo "🌌 Nexera OS: Starting Secure Remote CTO Gateway Tunnel..."
@@ -13,5 +13,5 @@ then
     exit 1
 fi
 
-echo "🚀 Exposing Next.js PWA Client (http://localhost:3001) over HTTPS..."
-cloudflared tunnel --url http://localhost:3001
+echo "🚀 Exposing Next.js PWA Client (http://localhost:3000) over HTTPS..."
+cloudflared tunnel --url http://localhost:3000

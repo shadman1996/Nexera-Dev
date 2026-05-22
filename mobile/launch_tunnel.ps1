@@ -1,5 +1,5 @@
 # Nexera OS PWA Cloudflare Tunnel Launch Script (PowerShell)
-# Exposes local port 3001 (Next.js PWA Client) to a secure public URL.
+# Exposes local port 3000 (Next.js PWA Client) to a secure public URL.
 
 Write-Output "--------------------------------------------------------"
 Write-Output "🌌 Nexera OS: Starting Secure Remote CTO Gateway Tunnel..."
@@ -11,5 +11,5 @@ if (-not (Get-Command "cloudflared" -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-Write-Output "🚀 Exposing Next.js PWA Client (http://localhost:3001) over HTTPS..."
-cloudflared tunnel --url http://localhost:3001
+Write-Output "🚀 Exposing Next.js PWA Client (http://localhost:3000) over HTTPS..."
+cloudflared tunnel --url http://localhost:3000

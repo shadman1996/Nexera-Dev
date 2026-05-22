@@ -17,6 +17,20 @@ Always run build commands from the root directory or targeted subdirectories as 
 - **Local Dev Server**: `python -m backend.main`
 - **Install Dependencies**: `pip install -r requirements.txt` inside root
 
+### Git Repository & Safe Directory Config
+- **Remote Repo**: `https://github.com/shadman1996/Nexera-Dev.git`
+- **Tracked Branch**: `master`
+- **Windows safe.directory Fix**:
+  ```bash
+  git config --global --add safe.directory D:/Nexera
+  ```
+- **Sync Changes**:
+  ```bash
+  git add .
+  git commit -m "feat: description"
+  git push origin master
+  ```
+
 ---
 
 ## 🧪 Testing Guidelines

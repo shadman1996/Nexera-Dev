@@ -74,6 +74,36 @@ Nexera/
 
 ---
 
+## 🌐 Git Repository & Environment Configuration
+
+Nexera is version-controlled and hosted on GitHub. If you are developing on a Windows host or within a container environment, ensure your Git credentials and environment directory permissions are properly aligned.
+
+### Remote Repository Sync
+To check the current remote and pull or push changes to the central repository:
+*   **Repository URL**: `https://github.com/shadman1996/Nexera-Dev.git`
+*   **Branch**: `master`
+
+### Windows Git Ownership Exception
+On Windows, NTFS partition mounts and symlinked system files might throw a `dubious ownership` exception. Register the workspace as a safe Git directory globally to resolve this:
+```bash
+git config --global --add safe.directory D:/Nexera
+```
+
+### Git CLI Operations
+Sync the latest updates to GitHub:
+```bash
+# Add new/modified files
+git add .
+
+# Commit changes
+git commit -m "feat: <change-description>"
+
+# Push to main stream
+git push origin master
+```
+
+---
+
 ## ⚡ Quick Start
 
 ### 1. Requirements & Core Setup

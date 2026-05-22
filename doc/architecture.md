@@ -59,6 +59,7 @@ graph TD
 - **GET `/api/workspace/read`**: Loads and reads files into active editor buffers. Parameters: `path`.
 
 ### 2.4 Git Version Control APIs
+- **Hosting Repository**: `https://github.com/shadman1996/Nexera-Dev.git` (Tracked branch: `master`)
 - **GET `/api/git/status`**: Scans the git workspace, returning branch, modified files list, recent commits log, and workspace dirtiness status.
 - **POST `/api/git/commit`**: Automatically stages all changes (`git add .`) and commits revisions with the provided commit message payload.
 
