@@ -1,0 +1,12 @@
+{
+  "name": "nexera-desktop",
+  "version": "1.0.0",
+  "description": "Standalone Desktop Client for Nexera OS",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^31.0.0"
+  }
+}

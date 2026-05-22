@@ -1,0 +1,108 @@
+{
+  "project": {
+    "name": "Nexera Automation OS",
+    "version": "1.0.0",
+    "codename": "Genesis",
+    "config_version": 1,
+    "config_history": []
+  },
+  "hardware": {
+    "cpu": "13th Gen Intel Core i7-13650HX",
+    "cpu_cores": 14,
+    "ram_gb": 16,
+    "max_docker_ram_gb": 2,
+    "gpu": "NVIDIA GeForce RTX 4060",
+    "vram_gb": 8
+  },
+  "model": {
+    "provider": "ollama",
+    "name": "qwen2.5-coder:7b-instruct-q4_K_M",
+    "max_context_tokens": 8192,
+    "temperature": 0.1,
+    "estimated_vram_gb": 4.5
+  },
+  "fallback_model": {
+    "provider": "gemini",
+    "name": "gemini-1.5-pro",
+    "api_key_env": "GEMINI_API_KEY",
+    "use_for": [
+      "vision",
+      "large_context",
+      "web_research"
+    ]
+  },
+  "phases": {
+    "1": {
+      "name": "Core Backend",
+      "description": "FastAPI + LangGraph Swarm + SQLite + Redis",
+      "output_dir": "backend"
+    },
+    "2": {
+      "name": "Desktop IDE",
+      "description": "Tauri (Rust) + Next.js Desktop UI",
+      "output_dir": "desktop"
+    },
+    "3": {
+      "name": "Mobile CTO Gateway",
+      "description": "Next.js PWA + Cloudflare Tunnels",
+      "output_dir": "mobile"
+    },
+    "4": {
+      "name": "OS Automation",
+      "description": "pyautogui + playwright integration",
+      "output_dir": "automation"
+    }
+  },
+  "security": {
+    "sandbox_root": "./workspace",
+    "allowed_write_paths": [
+      "./backend",
+      "./desktop",
+      "./mobile",
+      "./automation",
+      "./workspace"
+    ],
+    "blocked_commands": [
+      "rm -rf /",
+      "rm -rf ~",
+      "format c:",
+      "del /f /s /q c:\\",
+      "dd if=",
+      "mkfs",
+      ":(){:|:&};:",
+      "reg delete HKLM",
+      "shutdown",
+      "reboot"
+    ],
+    "max_self_heal_retries": 3,
+    "command_timeout_seconds": 120
+  },
+  "build": {
+    "max_agent_steps_per_phase": 100,
+    "message_history_limit": 14,
+    "file_read_truncate_chars": 3000
+  },
+  "api_keys": {
+    "gemini": "",
+    "openai": "",
+    "anthropic": ""
+  },
+  "user_patterns": {
+    "shorthands": {
+      "api": "Build a clean, optimized FastAPI REST API router with model schemas, robust data validation, and fully responsive CRUD endpoints.",
+      "ui": "Create a premium, responsive, and stunning user interface styled with custom CSS and modern animations.",
+      "test": "Write structured, high-coverage unit tests and pytest test cases covering all successful execution and edge-case failure pathways.",
+      "doc": "Update the technical markdown manuals inside the doc/ folder with modern, comprehensive setup instructions, configuration logs, and deployment schemas.",
+      "git": "Initialize git, stage all active workspace modifications, and write a professional, descriptive commit message summarizing the updates.",
+      "screen": "Run a remote desktop screen capture using capture_desktop, parse OCR characters, and index all visual active coordinates."
+    },
+    "analytics": {
+      "total_prompts": 1,
+      "typo_corrections_made": 0,
+      "shorthands_applied": 0,
+      "total_characters_processed": 8,
+      "adaptation_level": "High",
+      "user_tone_perception": "Highly Casual & Shorthand"
+    }
+  }
+}

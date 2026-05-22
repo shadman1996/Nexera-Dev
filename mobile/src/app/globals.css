@@ -1,0 +1,166 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@100;200;300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+:root {
+  --background: #030305;
+  --foreground: #f4f4f6;
+  
+  /* Cosmic Obsidian Palette */
+  --obsidian-dark: #030305;
+  --obsidian-mid: #08090d;
+  --obsidian-light: #0d0f15;
+  --obsidian-border: rgba(27, 29, 39, 0.45);
+  --obsidian-border-active: rgba(50, 121, 249, 0.4);
+  
+  /* Electric Accent Gradients */
+  --cobalt: #3279F9;
+  --indigo-accent: #6366F1;
+  --violet-accent: #8B5CF6;
+  
+  /* Font Family Overrides */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background: var(--obsidian-dark);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Thin High-Fidelity Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(3, 3, 5, 0.3);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(30, 32, 44, 0.6);
+  border-radius: 99px;
+  transition: all 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(50, 121, 249, 0.4);
+}
+
+/* Premium Acrylic Glassmorphism Panel */
+.glass-panel {
+  background: rgba(8, 9, 13, 0.75);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.glass-dropdown {
+  background: rgba(5, 6, 8, 0.95);
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border: 1px solid rgba(50, 121, 249, 0.15);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Sleek 3D Keycap Visualizer */
+.keycap {
+  background: linear-gradient(180deg, #161822 0%, #0b0c12 100%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 2.5px solid rgba(0, 0, 0, 0.6);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: #a1a3b5;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  border-radius: 5px;
+  padding: 2px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* High-End Welcome Dashboard Tiles */
+.welcome-tile {
+  background: rgba(8, 9, 13, 0.5);
+  border: 1px solid rgba(27, 29, 39, 0.6);
+  border-radius: 16px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.welcome-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(800px circle at var(--x, 0px) var(--y, 0px), rgba(50, 121, 249, 0.06), transparent 40%);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.welcome-tile:hover::before {
+  opacity: 1;
+}
+.welcome-tile:hover {
+  border-color: rgba(50, 121, 249, 0.35);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(50, 121, 249, 0.05);
+  transform: translateY(-2px);
+}
+
+/* Slow, Premium Glowing Animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.5;
+    box-shadow: 0 0 15px rgba(50, 121, 249, 0.1);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 35px rgba(99, 102, 241, 0.25);
+  }
+}
+.pulse-orb {
+  animation: pulse-glow 6s infinite ease-in-out;
+}
+
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+}
+.floating-shield {
+  animation: float-slow 8s infinite ease-in-out;
+}
+
+@keyframes ring-pulse {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.5;
+  }
+}
+.ring-neon {
+  animation: ring-pulse 4s infinite ease-in-out;
+}
+
+/* Custom Input Field Focus Glows */
+.input-glow-focus:focus-within {
+  border-color: rgba(50, 121, 249, 0.5);
+  box-shadow: 0 0 20px rgba(50, 121, 249, 0.15), inset 0 0 8px rgba(50, 121, 249, 0.05);
+}

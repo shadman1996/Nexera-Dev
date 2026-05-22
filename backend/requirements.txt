@@ -1,0 +1,12 @@
+""
+fastapi
+uvicorn[standard]
+websockets
+langchain
+langchain-ollama
+langgraph
+sqlalchemy
+aiosqlite
+redis
+pydantic
+""

@@ -1,0 +1,53 @@
+# ─── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+env/
+
+# ─── SQLite databases ─────────────────────────────────────────
+*.sqlite3
+*.db
+build_state.db
+
+# ─── Node / Next.js ───────────────────────────────────────────
+node_modules/
+.next/
+.turbo/
+out/
+*.tsbuildinfo
+
+# ─── Secrets & config overrides ───────────────────────────────
+.env
+.env.local
+.env.*.local
+nexera.config.local.json
+
+# ─── OS artifacts ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Editor ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Workspace sandbox (agent-generated files) ────────────────
+workspace/__pycache__/
+
+# ─── Playwright browser binaries ──────────────────────────────
+# (installed separately via: python -m playwright install chromium)
+# ms-playwright/ lives in AppData, not tracked here
