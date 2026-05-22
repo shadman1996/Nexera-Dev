@@ -1211,6 +1211,25 @@ Automated & Manual Testing
     }
   };
 
+  const handleMoveItem = async (sourcePath: string, targetFolderPath: string) => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/workspace/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: sourcePath, destination: targetFolderPath })
+      });
+      if (res.ok) {
+        addLog({ type: "system", message: `📦 Moved '${sourcePath}' → '${targetFolderPath}'` });
+        refreshFileTree();
+      } else {
+        const errData = await res.json();
+        alert(`Move failed: ${errData.message}`);
+      }
+    } catch {
+      alert("Failed to communicate with workspace API.");
+    }
+  };
+
   const handleOpenFile = async (path: string) => {
     if (openTabs.includes(path)) {
       setActiveTab(path);
@@ -1352,6 +1371,7 @@ Automated & Manual Testing
         activeFile={activeTab || ""}
         onCreateItem={handleCreateItem}
         onDeleteItem={handleDeleteItem}
+        onMoveItem={handleMoveItem}
         selectedNode={selectedNode}
         setSelectedNode={setSelectedNode}
         inlineCreate={inlineCreate}
@@ -4074,6 +4094,7 @@ interface FileTreeNodeProps {
   activeFile: string;
   onCreateItem: (parentPath: string, name: string, isDir: boolean) => void;
   onDeleteItem: (path: string) => void;
+  onMoveItem: (sourcePath: string, targetFolderPath: string) => void;
   selectedNode: { path: string; isDir: boolean } | null;
   setSelectedNode: (node: { path: string; isDir: boolean } | null) => void;
   inlineCreate: { parentPath: string; isDir: boolean } | null;
@@ -4089,6 +4110,7 @@ function FileTreeNode({
   activeFile,
   onCreateItem,
   onDeleteItem,
+  onMoveItem,
   selectedNode,
   setSelectedNode,
   inlineCreate,
@@ -4098,6 +4120,7 @@ function FileTreeNode({
   collapsedAllTrigger
 }: FileTreeNodeProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
     if (collapsedAllTrigger > 0) {
@@ -4115,8 +4138,21 @@ function FileTreeNode({
     const isSelected = selectedNode?.path === node.path;
 
     return (
-      <div className="pl-1 leading-normal">
-        <div className="flex justify-between items-center group/node hover:bg-neutral-900/20 rounded pr-2">
+      <div
+        className="pl-1 leading-normal"
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+        onDragLeave={(e) => { e.stopPropagation(); setIsDragOver(false); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragOver(false);
+          const src = e.dataTransfer.getData("text/plain");
+          if (src && src !== node.path && !src.startsWith(node.path + "\\") && !src.startsWith(node.path + "/")) {
+            onMoveItem(src, node.path);
+          }
+        }}
+      >
+        <div className={`flex justify-between items-center group/node rounded pr-2 transition-colors ${isDragOver ? "bg-[#3279F9]/20 border border-[#3279F9]/40" : "hover:bg-neutral-900/20"}`}>
           <button
             onClick={() => {
               setSelectedNode({ path: node.path, isDir: true });
@@ -4192,6 +4228,7 @@ function FileTreeNode({
                 activeFile={activeFile}
                 onCreateItem={onCreateItem}
                 onDeleteItem={onDeleteItem}
+                onMoveItem={onMoveItem}
                 selectedNode={selectedNode}
                 setSelectedNode={setSelectedNode}
                 inlineCreate={inlineCreate}
@@ -4208,7 +4245,7 @@ function FileTreeNode({
   } else {
     const isActive = activeFile === node.path;
     const isSelected = selectedNode?.path === node.path;
-    
+
     const ext = node.name.split(".").pop();
     let fileIcon = "📄";
     if (ext === "py") fileIcon = "🐍";
@@ -4216,7 +4253,10 @@ function FileTreeNode({
     else if (ext === "md") fileIcon = "📝";
 
     return (
-      <div className={`pl-5 py-1 text-[11px] font-mono hover:bg-neutral-900/30 rounded transition-all flex justify-between items-center group/node ${isSelected || isActive ? "text-[#3279F9] font-bold bg-indigo-950/15 border-l-2 border-[#3279F9] pl-4" : "text-[#5F7E97]"}`}>
+      <div
+        draggable
+        onDragStart={(e) => { e.dataTransfer.setData("text/plain", node.path); e.dataTransfer.effectAllowed = "move"; }}
+        className={`pl-5 py-1 text-[11px] font-mono hover:bg-neutral-900/30 rounded transition-all flex justify-between items-center group/node cursor-grab active:cursor-grabbing ${isSelected || isActive ? "text-[#3279F9] font-bold bg-indigo-950/15 border-l-2 border-[#3279F9] pl-4" : "text-[#5F7E97]"}`}>
         <button
           onClick={() => {
             setSelectedNode({ path: node.path, isDir: false });

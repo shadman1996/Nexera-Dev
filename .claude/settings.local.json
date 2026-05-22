@@ -7,7 +7,9 @@
       "Bash(grep -E \"\\\\.\\(config|json|txt|yml|yaml\\)$\")",
       "Bash(npx tsc *)",
       "Bash(python -c ' *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(npx electron *)",
+      "Bash(Start-Process -FilePath \"npx\" -ArgumentList \"electron\",\".\" -WorkingDirectory \"D:\\\\Nexera\\\\desktop\")"
     ]
   }
 }
