@@ -130,5 +130,43 @@ class TestDatabase(unittest.IsolatedAsyncioTestCase):
         await engine.dispose()
 
 
+from fastapi.testclient import TestClient
+from backend.main import app
+
+class TestSecurityMiddleware(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+        
+        # Patch CONFIG_PATH to prevent modifying user configuration
+        self.config_path_patcher = patch('backend.config.CONFIG_PATH', TEST_CONFIG_PATH)
+        self.config_path_patcher.start()
+        
+        if os.path.exists(TEST_CONFIG_PATH):
+            os.remove(TEST_CONFIG_PATH)
+
+    def tearDown(self):
+        self.config_path_patcher.stop()
+        if os.path.exists(TEST_CONFIG_PATH):
+            os.remove(TEST_CONFIG_PATH)
+
+    def test_access_denied_without_header(self):
+        # Query /api/status without X-Nexera-Key header
+        response = self.client.get("/api/status")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"message": "Unauthorized: Invalid or missing X-Nexera-Key header."})
+
+    def test_access_denied_with_wrong_header(self):
+        # Query /api/status with a wrong X-Nexera-Key header
+        response = self.client.get("/api/status", headers={"X-Nexera-Key": "wrong_key_value"})
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), {"message": "Unauthorized: Invalid or missing X-Nexera-Key header."})
+
+    def test_access_granted_with_valid_header(self):
+        # Query /api/status with the correct X-Nexera-Key header
+        response = self.client.get("/api/status", headers={"X-Nexera-Key": "nexera_master_key_2026"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "online")
+
+
 if __name__ == '__main__':
     unittest.main()

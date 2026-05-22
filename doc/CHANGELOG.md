@@ -13,8 +13,17 @@ All notable changes to the **Nexera OS** platform will be documented in this fil
 - **Header connection chip**: Replaced `● LOCAL CORE: CONNECTED` pill with a clean `● Connected` / `Reconnect →` button in emerald/grey.
 - **Active model label**: Added `{configModelName} ▾` label above the agent pills in the chat input area, matching the "Gemini 3.5 Flash (High)" label in the screenshot.
 
+### Added — API Key Header Authentication & Global Integration
+- **`APIKeyMiddleware`**: Restricts all direct REST routes `/api/*` to require the custom `X-Nexera-Key` validation header matching the `"security.api_key"` defined in `nexera.config.json` (defaults to `"nexera_master_key_2026"`).
+- **CORS Preflight Bypass**: Bypasses CORS standard `OPTIONS` requests within the middleware to prevent browser blocking.
+- **WebSocket Streaming & Docs Bypass**: Bypasses WebSocket upgrade handshakes (`/ws`, `/ws/terminal`) and Swagger (`/docs`) endpoints from header enforcement.
+- **Root Page Fetch Interceptors**: Dynamically intercepts all client-side network requests via monkeypatched `window.fetch` inside `mobile/src/app/page.tsx`, `mobile/src/app/web/page.tsx`, and `mobile/src/app/mobile/page.tsx` React mount hooks to automatically inject the security header globally.
+- **Desktop reference styling fetch upgrade**: Added `X-Nexera-Key` header injection to the core `req()` fetch handler inside `desktop/index.html`.
+- **Comprehensive Backend Security Tests**: Integrated `TestSecurityMiddleware` inside `workspace/test_backend.py` covering key validation cases, failing 401s, wrong keys, and correct keys.
+
 ### Verified
 - TypeScript: 0 errors
+- Unittests: 10/10 tests passing cleanly
 
 ---
 

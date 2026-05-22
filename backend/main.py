@@ -29,6 +29,10 @@ class FileCreateRequest(BaseModel):
 class FileDeleteRequest(BaseModel):
     path: str = Field(..., min_length=1)
 
+class FileMoveRequest(BaseModel):
+    source: str = Field(..., min_length=1)
+    destination: str = Field(..., min_length=1)
+
 class GitCommitRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=500)
 
@@ -382,6 +386,26 @@ async def delete_workspace_item(body: FileDeleteRequest):
         return JSONResponse(status_code=403, content={"message": str(ve)})
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"Delete error: {str(e)}"})
+
+@app.post("/api/workspace/move")
+async def move_workspace_item(body: FileMoveRequest):
+    try:
+        import shutil
+        src = secure_path(body.source)
+        dest_dir = secure_path(body.destination)
+        if not os.path.exists(src):
+            return JSONResponse(status_code=404, content={"message": "Source not found"})
+        if not os.path.isdir(dest_dir):
+            return JSONResponse(status_code=400, content={"message": "Destination must be a directory"})
+        dest = os.path.join(dest_dir, os.path.basename(src))
+        if os.path.exists(dest):
+            return JSONResponse(status_code=409, content={"message": f"'{os.path.basename(src)}' already exists in destination"})
+        shutil.move(src, dest)
+        return JSONResponse(content={"message": "Moved successfully", "new_path": dest})
+    except ValueError as ve:
+        return JSONResponse(status_code=403, content={"message": str(ve)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Move error: {str(e)}"})
 
 @app.get("/api/status")
 async def get_status():

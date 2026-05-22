@@ -1772,7 +1772,7 @@ function openReviewChanges() { setAct('git'); }
 // ─── API ─────────────────────────────────────────────────
 async function req(endpoint, method='GET', body=null) {
   try {
-    const opts={method,headers:{'Content-Type':'application/json'}};
+    const opts={method,headers:{'Content-Type':'application/json','X-Nexera-Key':'nexera_master_key_2026'}};
     if(body&&method!=='GET') opts.body=JSON.stringify(body);
     const r=await fetch(API+endpoint,opts);
     if(!r.ok){const e=await r.json().catch(()=>({}));toast('API: '+(e.message||r.statusText),'err');return null;}

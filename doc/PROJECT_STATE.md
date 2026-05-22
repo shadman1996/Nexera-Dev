@@ -174,8 +174,9 @@ All POST endpoints use **Pydantic typed models** — invalid payloads return str
 - `wrap_command(cmd)` — wraps list or string commands to run inside `nexera-sandbox` container
 - `get_terminal_spawner()` — returns `docker exec -it nexera-sandbox bash` or PowerShell fallback
 - `ensure_container_running()` — creates/starts container if not already running
-- **Wired into**: QA agent unit test runner (`graph.py`), `/ws/terminal` spawn
+- **Wired into**: QA agent unit test runner (`graph.py`), `/ws/terminal` spawn, and `bootstrap.py`'s `run_shell_command` wrapper to securely isolate all autonomous CLI and unit test operations.
 - **Fallback**: all operations work in host mode if Docker is absent — no crashes
+
 
 ### ✅ IDE Frontend (`mobile/src/app/page.tsx`)
 
@@ -220,14 +221,17 @@ SQLite via SQLAlchemy 2.0 async:
 - Analytics: total_prompts, typo_corrections_made, shorthands_applied, characters_processed
 - Config stored in `nexera.config.json` under `personalization.aliases`
 
+### ✅ API Key Header Authentication (v1.8.0)
+- Implemented `APIKeyMiddleware` on the FastAPI backend, restricting all direct REST queries under `/api/*` (except standard CORS `OPTIONS` preflight requests).
+- Validates the incoming requests by checking if the `X-Nexera-Key` matches `"security.api_key"` defined in `nexera.config.json` (defaults to `"nexera_master_key_2026"`).
+- Automatically responds with `401 Unauthorized` and `{"message": "Unauthorized: Invalid or missing X-Nexera-Key header."}` for invalid or missing keys.
+- WebSocket handshakes (`/ws` and `/ws/terminal`) and OpenAPI schemas (`/docs`) remain bypassed to facilitate smooth streaming and schema diagnostics.
+- Wired interceptors globally on `window.fetch` in Next.js frontends (`mobile/src/app/page.tsx`, `mobile/src/app/web/page.tsx`, and `mobile/src/app/mobile/page.tsx`) to seamlessly attach `X-Nexera-Key`.
+- Integrated authentication header into the desktop stub reference fetch helper (`desktop/index.html`).
+
 ---
 
 ## 5. What Is Partially Built
-
-### ⚠️ Docker Sandbox — wired but not all command paths use it
-`sandbox_manager.py` exists and `DockerSandbox` is instantiated in `main.py`. The QA agent routes through it. **But `bootstrap.py`'s `run_shell_command` tool does not yet call `sandbox.wrap_command()`** — it still runs commands directly with the `is_safe_command()` blocklist as the only guard.
-
-**Fix needed**: In `bootstrap.py` lines ~360–400, route `subprocess.run()` calls through `sandbox.wrap_command()`.
 
 ### ⚠️ Context Window — fixed message count, not token count
 `bootstrap.py` uses `MSG_LIMIT=14` (message count). It does not measure actual token usage.
@@ -239,19 +243,14 @@ SQLite via SQLAlchemy 2.0 async:
 
 **Fix needed**: Build a Tauri v2 app in `desktop/` that wraps `localhost:3000`.
 
-### ⚠️ No API Authentication
-All endpoints accept requests from any origin. CORS allows `*`. No API key, no session token.
-
-**Fix needed**: Add `X-Nexera-Key` header middleware that validates a key from `nexera.config.json`.
-
 ---
 
 ## 6. What Is Missing / Next Steps
 
 | Feature | Priority | Status |
 |---------|----------|--------|
-| Wire `bootstrap.py` shell commands through DockerSandbox | Critical | ⚠️ Partial |
-| API key authentication middleware | High | ❌ Missing |
+| Wire `bootstrap.py` shell commands through DockerSandbox | Critical | ✅ Completed (v1.8.0) |
+| API key authentication middleware | High | ✅ Completed (v1.8.0) |
 | `tiktoken` token counting + cost tracking | Medium | ❌ Missing |
 | RAG retrieval (ChromaDB + nomic-embed-text) | Medium | ❌ Missing |
 | Tauri v2 desktop wrapper | Medium | ❌ Missing (stub only) |
@@ -332,6 +331,8 @@ All endpoints accept requests from any origin. CORS allows `*`. No API key, no s
 ### Fixed
 | Bug | Version Fixed | Root Cause | Fix Applied |
 |-----|---------------|------------|-------------|
+| Direct REST shell commands bypass sandbox | v1.8.0 | `run_shell_command` in bootstrap ran direct subprocesses on host | Routed `run_shell_command` fully through `sandbox.wrap_command()` |
+| No API authentication — all endpoints open | v1.8.0 | Endpoints accepted all requests without key validation | Implemented `APIKeyMiddleware` requiring `X-Nexera-Key` and globally injected headers into client fetches |
 | Local-variable NameError in `/api/approvals/submit` | v1.7.0 | `status` and `notes` referenced before local definition in websocket broadcast scope | Defined `status` and `notes` locally in endpoint handler scope |
 | CTO approval banner reappears after clicking Approve | v1.6.0 | `/api/approvals/submit` left `pending` set; frontend 1500ms poll re-fetched it | `approval_queue["pending"] = None` cleared immediately in submit endpoint |
 | SQLAlchemy deprecation warning in tests | v1.5.0 | `from sqlalchemy.ext.declarative import declarative_base` deprecated | Changed to `from sqlalchemy.orm import declarative_base` |
@@ -340,8 +341,6 @@ All endpoints accept requests from any origin. CORS allows `*`. No API key, no s
 ### Active / Known Limitations
 | Issue | Severity | Notes |
 |-------|----------|-------|
-| `bootstrap.py` shell commands bypass DockerSandbox | High | `run_shell_command` in bootstrap still uses direct subprocess |
-| No API authentication — all endpoints open | High | CORS `*`, no API key middleware |
 | Warnings count in status bar was hardcoded 13 | Fixed v1.7.0 | Now shows 0 |
 | `desktop/` is not a real app | Medium | HTML stub only |
 
@@ -411,8 +410,8 @@ All invalid payloads return HTTP 422 with FastAPI's standard validation error bo
 ## 12. Roadmap
 
 ### v1.8.0 — Security
-- [ ] Wire `bootstrap.py` `run_shell_command` through `sandbox.wrap_command()`
-- [ ] Add `X-Nexera-Key` header authentication middleware
+- [x] Wire `bootstrap.py` `run_shell_command` through `sandbox.wrap_command()`
+- [x] Add `X-Nexera-Key` header authentication middleware
 
 ### v1.9.0 — Intelligence Upgrade
 - [ ] Add `tiktoken` token counting to all LLM calls
