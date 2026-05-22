@@ -130,10 +130,10 @@
       "screen": "Run a remote desktop screen capture using capture_desktop, parse OCR characters, and index all visual active coordinates."
     },
     "analytics": {
-      "total_prompts": 2,
+      "total_prompts": 3,
       "typo_corrections_made": 1,
       "shorthands_applied": 0,
-      "total_characters_processed": 32,
+      "total_characters_processed": 46,
       "adaptation_level": "High",
       "user_tone_perception": "Highly Casual & Shorthand"
     }

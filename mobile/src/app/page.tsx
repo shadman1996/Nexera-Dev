@@ -410,11 +410,22 @@ Automated & Manual Testing
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
 
-  // Conversation history sessions
-  interface ConvSession { id: string; title: string; messages: any[]; ts: number; }
+  // Conversation history sessions — persisted in SQLite via /api/conversations
+  interface ConvSession { id: string; title: string; messages: any[]; ts: number; project: string; }
   const [convSessions, setConvSessions] = useState<ConvSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>("default");
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [projectName, setProjectName] = useState<string>("default");
+
+  const fetchConversations = async (proj = projectName) => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/conversations?project=${encodeURIComponent(proj)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setConvSessions(data.map((c: any) => ({ id: c.id, title: c.title, messages: c.messages, ts: new Date(c.updated_at).getTime(), project: c.project_name })));
+      }
+    } catch { /* offline */ }
+  };
 
   const socketRef = useRef<WebSocket | null>(null);
   const terminalSocketRef = useRef<WebSocket | null>(null);
@@ -566,6 +577,7 @@ Automated & Manual Testing
     loadGitStatus();
     loadPersonalizationPatterns();
     fetchSandboxStatus();
+    fetchConversations();
     const interval = setInterval(checkPendingApproval, 1500);
     return () => {
       window.fetch = originalFetch;
@@ -1122,7 +1134,26 @@ Automated & Manual Testing
       isExecutionTrace: true
     };
 
-    setChatMessages((prev) => [...prev, userMsg, assistantMsg]);
+    setChatMessages((prev) => {
+      const updated = [...prev, userMsg, assistantMsg];
+      // Auto-save to DB: update existing session or create a new one
+      const sid = activeSessionId !== "default" ? activeSessionId : null;
+      const title = taskText.slice(0, 60);
+      if (sid) {
+        fetch(`http://127.0.0.1:8000/api/conversations/${sid}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: updated })
+        }).catch(() => {});
+      } else {
+        fetch("http://127.0.0.1:8000/api/conversations", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project_name: projectName, title, messages: updated })
+        }).then(r => r.ok ? r.json() : null).then(d => {
+          if (d?.id) { setActiveSessionId(d.id); setConvSessions(p => [{ id: d.id, title, messages: updated, ts: Date.now(), project: projectName }, ...p]); }
+        }).catch(() => {});
+      }
+      return updated;
+    });
     setIsExecuting(true);
     setLogs([]);
 
@@ -3544,7 +3575,12 @@ Automated & Manual Testing
                     </button>
                   )}
                   <button
-                    onClick={() => { activeConsoleTab === "system" ? setLogs([]) : setTerminalBuffer(""); }}
+                    onClick={() => {
+                      if (activeConsoleTab === "system") setLogs([]);
+                      else if (activeConsoleTab === "output") setLogs(prev => prev.filter(l => l.type !== "system" && l.type !== "success"));
+                      else if (activeConsoleTab === "debug") setLogs(prev => prev.filter(l => l.type !== "agent"));
+                      else if (activeConsoleTab === "powershell") setTerminalBuffer("");
+                    }}
                     className="text-[10px] hover:text-neutral-300 font-mono transition-colors px-1.5 py-0.5 rounded hover:bg-neutral-700/40"
                     title="Clear"
                   >
@@ -3607,8 +3643,40 @@ Automated & Manual Testing
                   )}
                   <div ref={terminalEndRef} />
                 </div>
+              ) : activeConsoleTab === "output" ? (
+                <div className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-relaxed flex flex-col gap-1 bg-[#1e1e1e] select-text custom-scrollbar">
+                  {logs.filter(l => l.type === "system" || l.type === "success").length === 0
+                    ? <span className="text-neutral-700">No output yet. Run a task to see output here.</span>
+                    : logs.filter(l => l.type === "system" || l.type === "success").map((l, i) => (
+                      <div key={i} className={`pl-3 border-l-2 py-0.5 ${l.type === "success" ? "border-emerald-500 text-emerald-400" : "border-neutral-700 text-neutral-300"}`}>{l.message}</div>
+                    ))
+                  }
+                  <div ref={terminalEndRef} />
+                </div>
+              ) : activeConsoleTab === "debug" ? (
+                <div className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-relaxed flex flex-col gap-1 bg-[#1e1e1e] select-text custom-scrollbar">
+                  {logs.filter(l => l.type === "agent").length === 0
+                    ? <span className="text-neutral-700">No agent traces yet. Start a swarm task to see debug output.</span>
+                    : logs.filter(l => l.type === "agent").map((l, i) => {
+                        const color = l.agent === "CEO" ? "border-violet-500 text-violet-300" : l.agent === "Engineer" ? "border-sky-500 text-sky-300" : "border-emerald-500 text-emerald-300";
+                        return <div key={i} className={`pl-3 border-l-2 py-0.5 ${color}`}><span className="font-bold uppercase">[{l.agent}]</span> {l.message}</div>;
+                      })
+                  }
+                  <div ref={terminalEndRef} />
+                </div>
+              ) : activeConsoleTab === "ports" ? (
+                <div className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-relaxed bg-[#1e1e1e] select-text custom-scrollbar">
+                  <table className="w-full text-[9.5px] font-mono border-collapse">
+                    <thead><tr className="text-neutral-500 border-b border-[#2d2d30] text-left"><th className="py-1.5 pr-6">Port</th><th className="pr-6">Address</th><th className="pr-6">Running Process</th><th>Action</th></tr></thead>
+                    <tbody>
+                      <tr className="border-b border-[#2d2d30] text-neutral-300"><td className="py-1.5 pr-6 text-[#3279F9] font-bold">8000</td><td className="pr-6">127.0.0.1:8000</td><td className="pr-6 text-emerald-400">● Nexera Backend (FastAPI)</td><td><span className="text-[9px] bg-emerald-900/30 text-emerald-400 px-2 py-0.5 rounded">ACTIVE</span></td></tr>
+                      <tr className="border-b border-[#2d2d30] text-neutral-300"><td className="py-1.5 pr-6 text-[#3279F9] font-bold">3000</td><td className="pr-6">localhost:3000</td><td className="pr-6 text-emerald-400">● Next.js Dev Server</td><td><span className="text-[9px] bg-emerald-900/30 text-emerald-400 px-2 py-0.5 rounded">ACTIVE</span></td></tr>
+                      <tr className="text-neutral-300"><td className="py-1.5 pr-6 text-neutral-600">11434</td><td className="pr-6">127.0.0.1:11434</td><td className="pr-6 text-neutral-500">Ollama LLM Server</td><td><span className="text-[9px] bg-neutral-800 text-neutral-500 px-2 py-0.5 rounded">OPTIONAL</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
               ) : (
-                <div 
+                <div
                   onClick={() => powershellInputRef.current?.focus()}
                   className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-normal bg-[#1e1e1e] select-text custom-scrollbar font-mono flex flex-col cursor-text"
                 >
@@ -3675,7 +3743,12 @@ Automated & Manual Testing
                           </div>
                         </div>
                         <button
-                          onClick={(e) => { e.stopPropagation(); setConvSessions(p => p.filter(x => x.id !== s.id)); if (s.id === activeSessionId) { setChatMessages([]); setActiveSessionId("default"); } }}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try { await fetch(`http://127.0.0.1:8000/api/conversations/${s.id}`, { method: "DELETE" }); } catch { /* offline */ }
+                            setConvSessions(p => p.filter(x => x.id !== s.id));
+                            if (s.id === activeSessionId) { setChatMessages([]); setActiveSessionId("default"); }
+                          }}
                           className="opacity-0 group-hover:opacity-100 text-[10px] text-rose-500 hover:text-rose-400 px-1 transition-all shrink-0"
                           title="Delete conversation"
                         >🗑</button>
@@ -3688,23 +3761,33 @@ Automated & Manual Testing
               <div className="flex items-center gap-0.5 text-[#808080] shrink-0">
                 {/* New conversation */}
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (chatMessages.length > 0) {
-                      const firstUser = chatMessages.find(m => m.role === "user");
-                      const title = firstUser?.content?.slice(0, 40) || "Conversation";
-                      const id = `sess-${Date.now()}`;
-                      setConvSessions(p => [...p, { id, title, messages: chatMessages, ts: Date.now() }]);
-                      setActiveSessionId(id);
+                      const firstUser = chatMessages.find((m: any) => m.role === "user");
+                      const title = firstUser?.content?.slice(0, 60) || "Conversation";
+                      try {
+                        const res = await fetch("http://127.0.0.1:8000/api/conversations", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ project_name: projectName, title, messages: chatMessages })
+                        });
+                        if (res.ok) {
+                          const { id } = await res.json();
+                          setConvSessions(p => [{ id, title, messages: chatMessages, ts: Date.now(), project: projectName }, ...p]);
+                          setActiveSessionId(id);
+                        }
+                      } catch { /* offline — fall back to local */ }
                     }
                     setChatMessages([]);
                     setShowHistoryPanel(false);
                   }}
-                  title="New conversation"
+                  title="New conversation (saves current)"
                   className="w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 hover:text-neutral-300 transition-colors text-[13px] font-light"
                 >+</button>
                 {/* Reload history */}
                 <button
-                  title="Reload chat history"
+                  onClick={() => fetchConversations()}
+                  title="Reload conversation history from database"
                   className="w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 hover:text-neutral-300 transition-colors"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
@@ -3747,8 +3830,23 @@ Automated & Manual Testing
               </div>
             </div>
 
+            {/* Project memory context bar */}
+            <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#2b2b2b] bg-[#1e1e1e]/60 shrink-0">
+              <span className="text-[9px] text-neutral-600 font-mono uppercase tracking-wider shrink-0">Project:</span>
+              <input
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                onBlur={() => fetchConversations(projectName)}
+                onKeyDown={(e) => { if (e.key === "Enter") { fetchConversations(projectName); (e.target as HTMLInputElement).blur(); } }}
+                className="flex-1 bg-transparent text-[10px] font-mono text-[#3279F9] border-b border-transparent focus:border-[#3279F9]/50 outline-none px-0.5 min-w-0"
+                placeholder="default"
+              />
+              <span className="text-[8px] text-neutral-700 font-mono shrink-0">{convSessions.length} saved</span>
+            </div>
+
             <div className="flex-1 p-4 flex flex-col justify-between overflow-hidden">
-              
+
               {/* Message scroll container */}
               <div className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1 custom-scrollbar pb-4 select-text">
                 
