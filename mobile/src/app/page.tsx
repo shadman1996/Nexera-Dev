@@ -3228,33 +3228,54 @@ Automated & Manual Testing
                   </div>
                 )}
 
-                {/* Editor Textarea with line numbers */}
-                <div className="flex-1 overflow-auto p-5 font-mono text-xs flex leading-relaxed select-text bg-[#1e1e1e]">
-                  <div className="text-neutral-700 text-right pr-4 select-none border-r border-[#2b2b2b] mr-4 flex flex-col font-mono select-none">
-                    {Array.from({ length: (fileContents[activeTab] || "").split("\n").length || 1 }).map((_, i) => (
-                      <span key={i} className="text-[10px] h-[18px] inline-block font-mono">{i + 1}</span>
-                    ))}
-                  </div>
-                  <textarea
-                    value={fileContents[activeTab] || ""}
-                    onChange={(e) => handleContentChange(activeTab, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Tab") {
-                        e.preventDefault();
-                        const target = e.target as HTMLTextAreaElement;
-                        const start = target.selectionStart;
-                        const end = target.selectionEnd;
-                        const value = target.value;
-                        const newValue = value.substring(0, start) + "    " + value.substring(end);
-                        handleContentChange(activeTab, newValue);
-                        setTimeout(() => {
-                          target.selectionStart = target.selectionEnd = start + 4;
-                        }, 0);
-                      }
-                    }}
-                    className="flex-1 bg-transparent border-none outline-none resize-none overflow-y-hidden text-neutral-300 font-mono leading-[18px] focus:ring-0 p-0 selection:bg-indigo-500/25 selection:text-indigo-200"
-                    style={{ height: `${Math.max(300, (fileContents[activeTab] || "").split("\n").length * 18)}px` }}
-                  />
+                {/* Premium Monaco Editor Container */}
+                <div className="flex-1 min-h-0 w-full relative bg-[#1e1e1e] border-t border-neutral-900/40">
+                  {activeTab ? (
+                    <Editor
+                      height="100%"
+                      width="100%"
+                      theme="vs-dark"
+                      language={getLanguageFromPath(activeTab)}
+                      value={fileContents[activeTab] || ""}
+                      onChange={(value) => handleContentChange(activeTab, value || "")}
+                      onMount={(editor, monaco) => {
+                        // Explicitly register Ctrl+S save shortcut command inside Monaco focus
+                        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+                          if (activeTab) {
+                            handleSaveFile(activeTab);
+                          }
+                        });
+                      }}
+                      options={{
+                        fontSize: 12,
+                        lineHeight: 18,
+                        minimap: { enabled: false },
+                        scrollbar: {
+                          vertical: "visible",
+                          horizontal: "visible",
+                          verticalScrollbarSize: 10,
+                          horizontalScrollbarSize: 10,
+                          useShadows: false
+                        },
+                        fontFamily: "var(--font-mono), Consolas, Monaco, monospace",
+                        wordWrap: "on",
+                        automaticLayout: true,
+                        padding: { top: 12 },
+                        cursorBlinking: "smooth",
+                        cursorSmoothCaretAnimation: "on",
+                        renderLineHighlight: "all",
+                        selectionHighlight: true,
+                        matchBrackets: "always",
+                        autoClosingBrackets: "always",
+                        tabSize: 4,
+                        insertSpaces: true
+                      }}
+                    />
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-neutral-500 font-mono text-xs">
+                      No active document open. Select a file from the explorer pane.
+                    </div>
+                  )}
                 </div>
 
                 {/* Floating active block indicator for pending approval matching screenshot perfectly */}

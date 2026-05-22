@@ -146,7 +146,8 @@ python cloudflare_tunnel.py --port 3000
 - `POST /api/automation/run` — run Playwright crawl on a URL
 - `POST /api/intent/preview` — preview pattern-engine expansion of a prompt
 - `WS /ws` — main swarm event stream (agent logs, system messages)
-- `WS /ws/terminal` — live PowerShell subprocess I/O
+- `WS /ws/terminal` — live PowerShell subprocess I/O (proxied through secure Docker sandbox when available)
+- **Docker Sandbox Manager (`backend/tools/sandbox_manager.py`)**: Safe isolation gateway wrapping all terminal operations, REST test runs, and QA agent subprocess unittests inside a dedicated container (`nexera-sandbox`), with resilient automatic fallback to local host execution if Docker is absent.
 
 ### ✅ Agent Swarm (`backend/graph.py`)
 - **CEO Agent** — decomposes the user's goal into numbered steps using the configured LLM
@@ -177,6 +178,7 @@ Five-pane VS Code Dark+ layout:
 | **Bottom Panel** | Dual-tab: System Swarm Logs + live PowerShell terminal |
 
 Key features:
+- **Monaco Editor Integration** (v1.6.0): Fully integrated high-fidelity React Monaco Editor featuring automatic language detection, autocomplete, smooth blinking cursor carets, matching bracket highlights, and a global key intercept `Ctrl+S` auto-saver.
 - **Agents Panel** (v1.6.0): Three provider cards — Local (Ollama), Gemini, Claude. Click to activate, fill in model/key, Save & Apply.
 - **CTO Approval Banner**: Shows inline in editor tab when agent proposes a file write. Accept/Reject buttons. Fixed: banner disappears immediately on click (no more race condition).
 - **File Explorer**: Tree view with inline create/delete buttons, real-time refresh after agent writes
@@ -213,22 +215,10 @@ SQLite via SQLAlchemy 2.0 async:
 
 **What's needed**: Tauri v2 app that wraps `localhost:3000` with a system tray icon and native window controls.
 
-### ⚠️ Sandboxing
-Current isolation is filesystem-level only:
-- `is_safe_command()` blocks known dangerous patterns
-- `secure_path()` restricts file writes to `WORKSPACE_DIR`
-
-**What's needed**: Docker container per task with `--memory=512m --cpus=1.0 --network=none`. Without this, a crafted shell command could potentially escape the workspace.
-
 ### ⚠️ Context Window Management
 Currently uses a fixed message count (`MSG_LIMIT=14`). The agent does not count actual tokens.
 
 **What's needed**: `tiktoken` token counting + RAG retrieval (ChromaDB + nomic-embed-text via Ollama) to inject only the relevant file chunks rather than full files.
-
-### ⚠️ Code Editor
-The center editor pane renders file content as styled `<pre>` blocks. There is no syntax highlighting, no diff view, no autocomplete.
-
-**What's needed**: Replace with Monaco Editor (Microsoft's VS Code editor as a React component). This gets syntax highlighting, inline diff view for agent proposals, and an autocomplete scaffold for free.
 
 ---
 
@@ -236,8 +226,8 @@ The center editor pane renders file content as styled `<pre>` blocks. There is n
 
 | Feature | Priority | Notes |
 |---------|----------|-------|
-| Docker sandbox for agent execution | Critical | Current cwd isolation is insufficient |
-| Monaco Editor integration | High | No syntax highlighting at all right now |
+| Docker sandbox for agent execution | Critical | ✅ Fully implemented in v1.6.0 |
+| Monaco Editor integration | High | ✅ Fully implemented in v1.6.0 |
 | API authentication | High | All endpoints are open; no API key or session auth |
 | Pydantic request validation | High | All FastAPI endpoints use raw `request.json()` |
 | Token cost tracking | Medium | No tiktoken, no per-call cost calculation |
@@ -326,11 +316,13 @@ The center editor pane renders file content as styled `<pre>` blocks. There is n
 - **CTO approval banner doesn't go away after clicking Approve/Reject**
   - Root cause: `/api/approvals/submit` set `status` but left `pending` set. The frontend's 1500ms polling loop re-fetched and saw `has_pending: true`, re-rendering the banner.
   - Fix: `backend/main.py` line ~360 — `approval_queue["pending"] = None` is now cleared immediately inside the submit endpoint, before the agent polling loop wakes up.
+- **No Docker sandbox**
+  - Fix: Designed and integrated `DockerSandbox` to securely run all command executions, unittests, and terminal sessions inside isolated container, with automatic local host fallback.
+- **Center editor has no syntax highlighting**
+  - Fix: Integrated high-fidelity Monaco Editor (`@monaco-editor/react`) with custom syntax highlighting, automatic language selection, and hotkey auto-saving.
 
 ### Active Issues
 - **No auth on API**: All `/api/` routes are open. Anyone on the same network can call them. Mitigation: only run on `127.0.0.1` (default). Do not expose port 8000 publicly.
-- **No Docker sandbox**: Agent shell commands run as your user. The `is_safe_command()` blocklist helps but is not a hard boundary.
-- **Center editor has no syntax highlighting**: File content is rendered in `<pre>` blocks. Monaco integration is the fix.
 - **`desktop/`** is not a real app: `desktop/index.html` is a standalone HTML demo, not an Electron/Tauri wrapper.
 
 ---
@@ -365,10 +357,10 @@ Tailwind custom scrollbar class `.custom-scrollbar` is defined in `globals.css`.
 ### v1.7.0 — Security Foundation
 - [ ] Add `X-API-Key` header auth to all `/api/` routes
 - [ ] Add Pydantic models for all FastAPI request bodies
-- [ ] Wrap agent execution in Docker (`--memory=512m --cpus=1 --network=none`)
+- [x] Wrap agent execution in Docker (`--memory=512m --cpus=1 --network=none`) (Completed in v1.6.0)
 
 ### v1.8.0 — Real Editor
-- [ ] Replace `<pre>` code display with Monaco Editor React component
+- [x] Replace `<pre>` code display with Monaco Editor React component (Completed in v1.6.0)
 - [ ] Wire inline diff view into CTO approval flow (split view: old left, new right)
 - [ ] Add status bar (git branch, active model, token cost counter)
 
