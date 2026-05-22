@@ -25,13 +25,13 @@ graph TD
     Core -->|Local Port 11434| Ollama[Ollama Local Engine]
     Ollama -->|Inference| Model[qwen2.5-coder:7b]
     
-    subgraph Swarm Core (graph.py)
+    subgraph SwarmCore ["Swarm Core (graph.py)"]
         CEO[CEO Planner] -->|Task Breakdown| Eng[Engineer Coder]
         Eng -->|Executes Code / Files| QA[QA Tester]
         QA -->|Self-Healing Loop| Eng
     end
     
-    Core --> Swarm Core
+    Core --> SwarmCore
     Core -->|pyautogui| Screen[Desktop Capture & OCR]
     Core -->|pattern_engine| Personalization[Intent Expansion & Spell Auto-Heal]
 ```
