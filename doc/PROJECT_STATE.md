@@ -1,5 +1,5 @@
 # Nexera OS — Project State Document
-> Last updated: 2026-05-22 | Version: **1.8.0**
+> Last updated: 2026-05-22 | Version: **1.9.0**
 >
 > **Purpose**: Single source of truth for any developer (human or AI) resuming this project cold. Read this before touching any code. It tells you what exists, where it lives, what works, what is broken, and what to build next.
 >

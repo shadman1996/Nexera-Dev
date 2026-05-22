@@ -4,6 +4,27 @@ All notable changes to the **Nexera OS** platform will be documented in this fil
 
 ---
 
+## [1.9.0] - 2026-05-22
+### Fixed — Manual Voice Control
+- **Auto-Speak Bug Removed**: Nexera no longer automatically speaks every agent message. The `speakResponse(data.message)` call in the WS `onmessage` agent branch has been removed.
+- **Voice is 100% user-controlled**: Speech only fires on (1) clicking the 🔊 bubble icon on a message, (2) toggling the Mute/Unmute button in the chat header, or (3) explicit mic/screen actions.
+
+### Added — Backend API Expansion
+- **`POST /api/workspace/rename`**: Rename any file or directory in the workspace sandbox. Accepts `{ path, new_name }`. Returns `{ new_path }`. Security: basename-only validation blocks path traversal. HTTP 409 on name collision.
+- **`GET /api/logs`**: Live telemetry log feed from SQLite `agent_logs`. Supports `?limit=N` (max 200) and `?phase=` filter. Returns `{ logs[], total }`.
+- **`GET /api/token-usage`**: v1.9.0 token usage tracker — groups `agent_logs` by agent, returns per-agent call counts and estimated tokens (~250 tokens/call). Roadmap: tiktoken integration in v2.0.
+- **`FileRenameRequest` Pydantic model**: Added with `path` and `new_name` validated fields.
+
+### Added — Desktop App
+- **Desktop HTML App launched**: `desktop/index.html` opened in the default system browser. VS Code Dark+ themed standalone IDE accessible without the Next.js dev server.
+
+### Verified
+- `backend/main.py` → ✅ AST OK
+- `mobile/` TypeScript → ✅ 0 errors
+- Git commit: `7936ac5` — 9 files changed, 337 insertions
+
+---
+
 ## [1.8.0] - 2026-05-22
 ### Changed — Antigravity IDE Design Match
 - **Flat VS Code Tabs**: Replaced rounded pill tabs with flat rectangular VS Code-style tabs. Each tab has a colored language badge (`py` in blue, `tsx` in teal, `md` in blue-grey, etc.), active tab has a cobalt top-border accent (`box-shadow: inset 0 1px 0 #3279F9`), inactive tabs are `#2d2d30`, hover reveals `×` close button.
