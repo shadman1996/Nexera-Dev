@@ -3,8 +3,13 @@
     "name": "Nexera Automation OS",
     "version": "1.0.0",
     "codename": "Genesis",
-    "config_version": 6,
+    "config_version": 7,
     "config_history": [
+      {
+        "timestamp": "2026-05-22T14:13:29Z",
+        "version": 7,
+        "change": "Updated settings (Model: gemini-1.5-flash, Provider: gemini)"
+      },
       {
         "timestamp": "2026-05-22T14:11:51Z",
         "version": 6,
@@ -41,12 +46,12 @@
     "vram_gb": 8
   },
   "model": {
-    "provider": "ollama",
-    "name": "qwen2.5-coder:7b-instruct-q4_K_M",
-    "max_context_tokens": 8192,
+    "provider": "gemini",
+    "name": "gemini-1.5-flash",
+    "max_context_tokens": 1048576,
     "temperature": 1,
     "estimated_vram_gb": 4.5,
-    "base_url": "http://127.0.0.1:11434"
+    "base_url": "https://generativelanguage.googleapis.com"
   },
   "fallback_model": {
     "provider": "gemini",

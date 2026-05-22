@@ -9,7 +9,11 @@
       "Bash(python -c ' *)",
       "Bash(node -e ' *)",
       "Bash(npx electron *)",
-      "Bash(Start-Process -FilePath \"npx\" -ArgumentList \"electron\",\".\" -WorkingDirectory \"D:\\\\Nexera\\\\desktop\")"
+      "Bash(Start-Process -FilePath \"npx\" -ArgumentList \"electron\",\".\" -WorkingDirectory \"D:\\\\Nexera\\\\desktop\")",
+      "PowerShell(Start-Sleep -Seconds 3; \\(Invoke-WebRequest -Uri \"http://127.0.0.1:8000/api/status\" -UseBasicParsing -ErrorAction Stop\\).StatusCode)",
+      "Bash(Get-ChildItem -Path D:\\\\Nexera -Recurse -Depth 2)",
+      "Bash(Select-Object FullName, PSIsContainer)",
+      "Bash(Sort-Object FullName)"
     ]
   }
 }

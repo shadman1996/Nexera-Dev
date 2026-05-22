@@ -215,7 +215,7 @@ Automated & Manual Testing
   const [collapsedAllTrigger, setCollapsedAllTrigger] = useState(0);
 
   // Terminal Panel Tabs & Shell States
-  const [activeConsoleTab, setActiveConsoleTab] = useState<"system" | "powershell">("system");
+  const [activeConsoleTab, setActiveConsoleTab] = useState<"system" | "output" | "debug" | "powershell" | "ports">("system");
   const [terminalBuffer, setTerminalBuffer] = useState("");
   const [terminalInput, setTerminalInput] = useState("");
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
@@ -409,6 +409,12 @@ Automated & Manual Testing
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
+
+  // Conversation history sessions
+  interface ConvSession { id: string; title: string; messages: any[]; ts: number; }
+  const [convSessions, setConvSessions] = useState<ConvSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>("default");
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
   const terminalSocketRef = useRef<WebSocket | null>(null);
@@ -918,7 +924,9 @@ Automated & Manual Testing
               }
             }));
           }
-          speakResponse(data.message);
+          // ⚠️ SILENT BY DEFAULT — speakResponse is only triggered manually via the
+          // speaker bubble icon on each message or when the user unmutes the toggle.
+          // Do NOT auto-speak agent messages here.
         }
 
         if (data.message && (data.message.includes("saved") || data.message.includes("completed"))) {
@@ -1008,23 +1016,25 @@ Automated & Manual Testing
   };
 
   const handleCloseWindow = () => {
-    addLog({ type: "system", message: "🔌 Closing Nexera OS Workspace..." });
-    if (typeof window !== "undefined") {
-      const confirmClose = window.confirm("Are you sure you want to close the Nexera OS?");
-      if (confirmClose) {
-        window.close();
-        alert("Nexera session ended. You can now close this tab/window.");
-      }
+    if ((window as any).electronAPI?.isElectron) {
+      (window as any).electronAPI.closeWindow();
+    } else if (window.confirm("Close Nexera OS?")) {
+      window.close();
     }
   };
 
   const handleMinimizeWindow = () => {
-    addLog({ type: "system", message: "⚙️ IDE workspace window minimized." });
-    alert("Minimize: IDE workspace window minimized.");
+    if ((window as any).electronAPI?.isElectron) {
+      (window as any).electronAPI.minimizeWindow();
+    } else {
+      addLog({ type: "system", message: "⚙️ Minimize is only available in the desktop app." });
+    }
   };
 
   const handleMaximizeWindow = () => {
-    if (typeof document !== "undefined") {
+    if ((window as any).electronAPI?.isElectron) {
+      (window as any).electronAPI.maximizeWindow();
+    } else if (typeof document !== "undefined") {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(() => {});
         addLog({ type: "system", message: "🖥️ Maximized to Fullscreen Mode." });
@@ -3486,14 +3496,18 @@ Automated & Manual Testing
                       {logs.filter(l => l.type === "error").length || 0}
                     </span>
                   </button>
-                  {/* Output tab (visual) */}
-                  <button className="h-full px-3.5 flex items-center text-[11px] font-mono text-[#808080] hover:text-[#cccccc] transition-colors">
-                    Output
-                  </button>
-                  {/* Debug Console tab (visual) */}
-                  <button className="h-full px-3.5 flex items-center text-[11px] font-mono text-[#808080] hover:text-[#cccccc] transition-colors">
-                    Debug Console
-                  </button>
+                  {/* Output tab */}
+                  <button
+                    onClick={() => setActiveConsoleTab("output")}
+                    className={`h-full px-3.5 flex items-center text-[11px] font-mono transition-colors relative ${activeConsoleTab === "output" ? "text-[#cccccc] bg-[#1e1e1e]" : "text-[#808080] hover:text-[#cccccc]"}`}
+                    style={activeConsoleTab === "output" ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
+                  >Output</button>
+                  {/* Debug Console tab */}
+                  <button
+                    onClick={() => setActiveConsoleTab("debug")}
+                    className={`h-full px-3.5 flex items-center text-[11px] font-mono transition-colors relative ${activeConsoleTab === "debug" ? "text-[#cccccc] bg-[#1e1e1e]" : "text-[#808080] hover:text-[#cccccc]"}`}
+                    style={activeConsoleTab === "debug" ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
+                  >Debug Console</button>
                   {/* Terminal tab */}
                   <button
                     onClick={() => setActiveConsoleTab("powershell")}
@@ -3506,10 +3520,12 @@ Automated & Manual Testing
                   >
                     Terminal
                   </button>
-                  {/* Ports tab (visual) */}
-                  <button className="h-full px-3.5 flex items-center text-[11px] font-mono text-[#808080] hover:text-[#cccccc] transition-colors">
-                    Ports
-                  </button>
+                  {/* Ports tab */}
+                  <button
+                    onClick={() => setActiveConsoleTab("ports")}
+                    className={`h-full px-3.5 flex items-center text-[11px] font-mono transition-colors relative ${activeConsoleTab === "ports" ? "text-[#cccccc] bg-[#1e1e1e]" : "text-[#808080] hover:text-[#cccccc]"}`}
+                    style={activeConsoleTab === "ports" ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
+                  >Ports</button>
                 </div>
                 {/* Right-side actions */}
                 <div className="flex items-center gap-2 pb-1.5 text-[#808080]">
@@ -3621,19 +3637,68 @@ Automated & Manual Testing
         </section>
 
         {/* 5. Right-Hand Swarm Chat Sidebar (Accordion DX style) */}
+        {showHistoryPanel && <div className="fixed inset-0 z-40" onClick={() => setShowHistoryPanel(false)} />}
         {isRightSidebarOpen && (
           <section className="w-80 bg-[#252526] border-l border-[#2b2b2b] flex flex-col overflow-hidden shrink-0 select-none">
             
             {/* Right panel header — VS Code Antigravity style */}
-            <div className="h-9 border-b border-[#252526] bg-[#252526] flex items-center justify-between px-3 shrink-0 select-none">
-              <span className="text-[11px] font-semibold text-[#cccccc] font-mono truncate flex items-center gap-1.5">
-                Nexera Autonomous OS Bootstrap
-                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className="text-neutral-600 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
-              </span>
-              <div className="flex items-center gap-0.5 text-[#808080]">
+            <div className="h-9 border-b border-[#252526] bg-[#252526] flex items-center justify-between px-3 shrink-0 select-none relative">
+              <button
+                onClick={() => setShowHistoryPanel(p => !p)}
+                className="text-[11px] font-semibold text-[#cccccc] font-mono truncate flex items-center gap-1.5 hover:text-white transition-colors min-w-0"
+              >
+                <span className="truncate">
+                  {convSessions.find(s => s.id === activeSessionId)?.title || "Nexera Autonomous OS Bootstrap"}
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className={`text-neutral-500 shrink-0 transition-transform ${showHistoryPanel ? "rotate-180" : ""}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+              </button>
+
+              {/* History dropdown */}
+              {showHistoryPanel && (
+                <div className="absolute top-9 left-0 right-0 z-50 bg-[#1e1e1e] border border-[#3c3c3c] shadow-2xl max-h-72 overflow-y-auto custom-scrollbar">
+                  {convSessions.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-[10px] text-neutral-600 font-mono">No saved conversations yet.<br/>Click + to start a new one.</div>
+                  ) : (
+                    convSessions.slice().reverse().map((s) => (
+                      <div
+                        key={s.id}
+                        onClick={() => { setChatMessages(s.messages); setActiveSessionId(s.id); setShowHistoryPanel(false); }}
+                        className={`flex items-center justify-between px-3 py-2.5 cursor-pointer border-b border-[#2d2d30] hover:bg-[#2a2d2e] transition-colors group ${s.id === activeSessionId ? "bg-[#252526]" : ""}`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-5 h-5 rounded bg-[#3279F9]/20 flex items-center justify-center shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="#3279F9" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z" /></svg>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[10px] text-[#cccccc] font-mono truncate max-w-[160px]">{s.title}</div>
+                            <div className="text-[9px] text-neutral-600 font-mono">{new Date(s.ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConvSessions(p => p.filter(x => x.id !== s.id)); if (s.id === activeSessionId) { setChatMessages([]); setActiveSessionId("default"); } }}
+                          className="opacity-0 group-hover:opacity-100 text-[10px] text-rose-500 hover:text-rose-400 px-1 transition-all shrink-0"
+                          title="Delete conversation"
+                        >🗑</button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center gap-0.5 text-[#808080] shrink-0">
                 {/* New conversation */}
                 <button
-                  onClick={() => { setChatMessages([]); }}
+                  onClick={() => {
+                    if (chatMessages.length > 0) {
+                      const firstUser = chatMessages.find(m => m.role === "user");
+                      const title = firstUser?.content?.slice(0, 40) || "Conversation";
+                      const id = `sess-${Date.now()}`;
+                      setConvSessions(p => [...p, { id, title, messages: chatMessages, ts: Date.now() }]);
+                      setActiveSessionId(id);
+                    }
+                    setChatMessages([]);
+                    setShowHistoryPanel(false);
+                  }}
                   title="New conversation"
                   className="w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 hover:text-neutral-300 transition-colors text-[13px] font-light"
                 >+</button>

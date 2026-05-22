@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
 function createWindow() {
@@ -11,9 +11,14 @@ function createWindow() {
     titleBarStyle: 'hidden',
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     }
   });
+
+  ipcMain.on('window-close',    () => win.close());
+  ipcMain.on('window-minimize', () => win.minimize());
+  ipcMain.on('window-maximize', () => win.isMaximized() ? win.unmaximize() : win.maximize());
 
   // Enable dark mode theme options natively
   win.webContents.on('dom-ready', () => {

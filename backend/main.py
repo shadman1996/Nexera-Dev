@@ -33,6 +33,10 @@ class FileMoveRequest(BaseModel):
     source: str = Field(..., min_length=1)
     destination: str = Field(..., min_length=1)
 
+class FileRenameRequest(BaseModel):
+    path: str = Field(..., min_length=1)          # relative path to the file/dir to rename
+    new_name: str = Field(..., min_length=1)      # the new basename only (not a full path)
+
 class GitCommitRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=500)
 
@@ -56,6 +60,16 @@ class ShorthandSaveRequest(BaseModel):
 class ShorthandDeleteRequest(BaseModel):
     trigger: str = Field(..., min_length=1)
 
+class ConversationCreateRequest(BaseModel):
+    project_name: str = Field(default="default", max_length=200)
+    title: str = Field(..., min_length=1, max_length=300)
+    messages: list = Field(default=[])
+
+class ConversationUpdateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=300)
+    messages: Optional[list] = Field(default=None)
+    project_name: Optional[str] = Field(default=None, max_length=200)
+
 class AutomationRequest(BaseModel):
     action: str = Field(..., pattern="^(click|type|crawl)$")
     x: Optional[int] = Field(default=None, ge=0)
@@ -68,6 +82,33 @@ app = FastAPI(title="Nexera Developer Core", version="1.0.0")
 WORKSPACE_DIR = os.path.abspath(os.path.join(os.getcwd(), "workspace"))
 if not os.path.exists(WORKSPACE_DIR):
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
+
+DB_PATH = os.path.join(os.getcwd(), "db.sqlite3")
+
+def _db():
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Ensure conversations table exists
+def _init_conv_table():
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            id TEXT PRIMARY KEY,
+            project_name TEXT NOT NULL DEFAULT 'default',
+            title TEXT NOT NULL,
+            messages_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+_init_conv_table()
 
 from backend.tools.sandbox_manager import DockerSandbox
 sandbox = DockerSandbox(WORKSPACE_DIR)
@@ -406,6 +447,105 @@ async def move_workspace_item(body: FileMoveRequest):
         return JSONResponse(status_code=403, content={"message": str(ve)})
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"Move error: {str(e)}"})
+
+@app.post("/api/workspace/rename")
+async def rename_workspace_item(body: FileRenameRequest):
+    """Rename a file or directory inside the workspace sandbox."""
+    try:
+        import shutil
+        src = secure_path(body.path)
+        if not os.path.exists(src):
+            return JSONResponse(status_code=404, content={"message": "Source not found"})
+        # Validate new_name does not contain path separators (basename only)
+        new_name = os.path.basename(body.new_name.strip())
+        if not new_name or new_name in (".", ".."):
+            return JSONResponse(status_code=400, content={"message": "Invalid new name"})
+        dest = os.path.join(os.path.dirname(src), new_name)
+        if os.path.exists(dest):
+            return JSONResponse(status_code=409, content={"message": f"'{new_name}' already exists"})
+        shutil.move(src, dest)
+        # Compute the new relative path for the frontend
+        new_rel = os.path.relpath(dest, WORKSPACE_DIR).replace("\\", "/")
+        return JSONResponse(content={"message": "Renamed successfully", "new_path": new_rel})
+    except ValueError as ve:
+        return JSONResponse(status_code=403, content={"message": str(ve)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Rename error: {str(e)}"})
+
+
+# ── Conversation Memory DB ──────────────────────────────────────────────────
+
+@app.get("/api/conversations")
+async def list_conversations(project: str = "default"):
+    import json as _json
+    try:
+        conn = _db()
+        rows = conn.execute(
+            "SELECT id, project_name, title, messages_json, created_at, updated_at FROM conversations WHERE project_name=? ORDER BY updated_at DESC",
+            (project,)
+        ).fetchall()
+        conn.close()
+        return JSONResponse(content=[
+            {"id": r["id"], "project_name": r["project_name"], "title": r["title"],
+             "messages": _json.loads(r["messages_json"]),
+             "created_at": r["created_at"], "updated_at": r["updated_at"]}
+            for r in rows
+        ])
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
+@app.post("/api/conversations")
+async def create_conversation(body: ConversationCreateRequest):
+    import json as _json, uuid as _uuid
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    conv_id = str(_uuid.uuid4())
+    try:
+        conn = _db()
+        conn.execute(
+            "INSERT INTO conversations (id, project_name, title, messages_json, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+            (conv_id, body.project_name, body.title, _json.dumps(body.messages), now, now)
+        )
+        conn.commit()
+        conn.close()
+        return JSONResponse(content={"id": conv_id, "message": "Created"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
+@app.put("/api/conversations/{conv_id}")
+async def update_conversation(conv_id: str, body: ConversationUpdateRequest):
+    import json as _json
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    try:
+        conn = _db()
+        row = conn.execute("SELECT * FROM conversations WHERE id=?", (conv_id,)).fetchone()
+        if not row:
+            conn.close()
+            return JSONResponse(status_code=404, content={"message": "Not found"})
+        new_title = body.title if body.title is not None else row["title"]
+        new_msgs = _json.dumps(body.messages) if body.messages is not None else row["messages_json"]
+        new_proj = body.project_name if body.project_name is not None else row["project_name"]
+        conn.execute(
+            "UPDATE conversations SET title=?, messages_json=?, project_name=?, updated_at=? WHERE id=?",
+            (new_title, new_msgs, new_proj, now, conv_id)
+        )
+        conn.commit()
+        conn.close()
+        return JSONResponse(content={"message": "Updated"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
+@app.delete("/api/conversations/{conv_id}")
+async def delete_conversation(conv_id: str):
+    try:
+        conn = _db()
+        conn.execute("DELETE FROM conversations WHERE id=?", (conv_id,))
+        conn.commit()
+        conn.close()
+        return JSONResponse(content={"message": "Deleted"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
 
 @app.get("/api/status")
 async def get_status():
@@ -1029,6 +1169,77 @@ async def get_test_status():
         })
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"Database read error: {e}"})
+
+@app.get("/api/logs")
+async def get_live_logs(limit: int = 50, phase: str = ""):
+    """
+    Fetch the most recent agent operation logs from SQLite.
+    Optional ?phase=testing|building|coding filter.
+    Optional ?limit=N (default 50, max 200).
+    """
+    import sqlite3
+    limit = min(int(limit), 200)
+    db_path = os.path.join(os.getcwd(), "db.sqlite3")
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        if phase:
+            cursor.execute(
+                "SELECT id, timestamp, agent_name, action, result, phase "
+                "FROM agent_logs WHERE phase = ? ORDER BY id DESC LIMIT ?",
+                (phase, limit)
+            )
+        else:
+            cursor.execute(
+                "SELECT id, timestamp, agent_name, action, result, phase "
+                "FROM agent_logs ORDER BY id DESC LIMIT ?",
+                (limit,)
+            )
+        rows = cursor.fetchall()
+        conn.close()
+        return JSONResponse(content={"logs": [dict(r) for r in rows], "total": len(rows)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Log fetch error: {e}"})
+
+
+@app.get("/api/token-usage")
+async def get_token_usage():
+    """
+    v1.9.0 — Returns per-agent token usage estimates tracked in agent_logs.
+    Sums estimated input tokens from all logged LLM calls.
+    Integrate tiktoken for precise counts in v2.0.
+    """
+    import sqlite3
+    db_path = os.path.join(os.getcwd(), "db.sqlite3")
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) as total_calls, agent_name FROM agent_logs GROUP BY agent_name ORDER BY total_calls DESC"
+        )
+        rows = cursor.fetchall()
+        # Estimate token usage: average ~250 tokens per logged action
+        usage = []
+        grand_total = 0
+        for row in rows:
+            est_tokens = row["total_calls"] * 250
+            grand_total += est_tokens
+            usage.append({
+                "agent": row["agent_name"],
+                "calls": row["total_calls"],
+                "estimated_tokens": est_tokens
+            })
+        conn.close()
+        return JSONResponse(content={
+            "agents": usage,
+            "grand_total_estimated_tokens": grand_total,
+            "note": "Estimated at ~250 tokens/call. Integrate tiktoken for precise counts."
+        })
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Token usage fetch error: {e}"})
+
 
 if __name__ == "__main__":
     import uvicorn
