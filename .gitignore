@@ -51,3 +51,5 @@ workspace/__pycache__/
 # ─── Playwright browser binaries ──────────────────────────────
 # (installed separately via: python -m playwright install chromium)
 # ms-playwright/ lives in AppData, not tracked here
+
+.claude/
