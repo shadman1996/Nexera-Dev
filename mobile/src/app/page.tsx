@@ -1222,8 +1222,9 @@ Automated & Manual Testing
         addLog({ type: "system", message: `📦 Moved '${sourcePath}' → '${targetFolderPath}'` });
         refreshFileTree();
       } else {
-        const errData = await res.json();
-        alert(`Move failed: ${errData.message}`);
+        let errMsg = `HTTP ${res.status}`;
+        try { const d = await res.json(); errMsg = d.message || d.detail || errMsg; } catch { /* ignore */ }
+        alert(`Move failed: ${errMsg}`);
       }
     } catch {
       alert("Failed to communicate with workspace API.");
@@ -1397,14 +1398,14 @@ Automated & Manual Testing
     <div className="h-screen bg-[#1e1e1e] text-[#f4f4f6] flex flex-col font-sans overflow-hidden select-none border border-[#3c3c3c]/70 shadow-[0_0_80px_rgba(0,0,0,0.95)] relative">
       
       {/* 1. Chrome Native Windows Menu & Traffic Controls */}
-      <header className="h-11 bg-[#3c3c3c] backdrop-blur-xl border-b border-[#3c3c3c]/70 flex items-center justify-between px-4 select-none shrink-0 relative z-50 shadow-lg shadow-black/20">
+      <header className="h-11 bg-[#3c3c3c] backdrop-blur-xl border-b border-[#3c3c3c]/70 flex items-center justify-between px-4 select-none shrink-0 relative z-50 shadow-lg shadow-black/20" style={{ WebkitAppRegion: "drag" } as React.CSSProperties}>
         {openMenuDropdown && (
           <div 
             className="fixed inset-0 z-40 bg-transparent" 
             onClick={() => setOpenMenuDropdown(null)} 
           />
         )}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           {/* Windows Window Buttons layout (Mac styling with hover indicators) */}
           <div className="flex items-center gap-1.5 mr-2 group/traffic">
             <span 
@@ -1904,7 +1905,7 @@ Automated & Manual Testing
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           {/* Top Panel Controls Toggle layout (Matches screenshot perfectly & operates layout toggles!) */}
           <div className="flex items-center gap-2 border-r border-[#3c3c3c]/70 pr-3 mr-1 text-neutral-500">
             {/* Split Editor / Two Column icon */}

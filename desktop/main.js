@@ -7,8 +7,8 @@ function createWindow() {
     height: 800,
     title: "Nexera Core - Desktop Client",
     backgroundColor: '#0a0a0a',
-    frame: true, // Standard OS controls for robustness, dark titlebar enabled
-    titleBarStyle: 'hiddenInset', // Mac-style inset controls if on macOS
+    frame: false,
+    titleBarStyle: 'hidden',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true

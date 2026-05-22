@@ -3,8 +3,18 @@
     "name": "Nexera Automation OS",
     "version": "1.0.0",
     "codename": "Genesis",
-    "config_version": 4,
+    "config_version": 6,
     "config_history": [
+      {
+        "timestamp": "2026-05-22T14:11:51Z",
+        "version": 6,
+        "change": "Updated settings (Model: qwen2.5-coder:7b-instruct-q4_K_M, Provider: ollama)"
+      },
+      {
+        "timestamp": "2026-05-22T14:11:39Z",
+        "version": 5,
+        "change": "Updated settings (Model: qwen2.5-coder:7b-instruct-q4_K_M, Provider: ollama)"
+      },
       {
         "timestamp": "2026-05-22T13:27:27Z",
         "version": 4,
@@ -31,12 +41,12 @@
     "vram_gb": 8
   },
   "model": {
-    "provider": "openai",
-    "name": "gpt-4o",
-    "max_context_tokens": 4096,
-    "temperature": 0.1,
+    "provider": "ollama",
+    "name": "qwen2.5-coder:7b-instruct-q4_K_M",
+    "max_context_tokens": 8192,
+    "temperature": 1,
     "estimated_vram_gb": 4.5,
-    "base_url": "https://api.openai.com/v1"
+    "base_url": "http://127.0.0.1:11434"
   },
   "fallback_model": {
     "provider": "gemini",
