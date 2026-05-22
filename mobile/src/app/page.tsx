@@ -84,7 +84,7 @@ const agentsList = [
 ];
 
 export default function NexeraDesktopIDE() {
-  const [activePanel, setActivePanel] = useState<"explorer" | "search" | "git" | "run" | "extensions" | "brain" | "viewport" | "settings">("explorer");
+  const [activePanel, setActivePanel] = useState<"explorer" | "search" | "git" | "run" | "extensions" | "brain" | "viewport" | "settings" | "agents">("explorer");
   const [activeTask, setActiveTask] = useState("");
   const [isExecuting, setIsExecuting] = useState(false);
   const [logs, setLogs] = useState<LogMessage[]>([]);
@@ -1248,10 +1248,10 @@ Automated & Manual Testing
   };
 
   return (
-    <div className="h-screen bg-[#030305] text-[#f4f4f6] flex flex-col font-sans overflow-hidden select-none border border-[#1b1c24]/50 shadow-[0_0_80px_rgba(0,0,0,0.95)] relative">
+    <div className="h-screen bg-[#1e1e1e] text-[#f4f4f6] flex flex-col font-sans overflow-hidden select-none border border-[#1b1c24]/50 shadow-[0_0_80px_rgba(0,0,0,0.95)] relative">
       
       {/* 1. Chrome Native Windows Menu & Traffic Controls */}
-      <header className="h-11 bg-[#050608]/75 backdrop-blur-xl border-b border-[#1b1c24]/50 flex items-center justify-between px-4 select-none shrink-0 relative z-50 shadow-lg shadow-black/20">
+      <header className="h-11 bg-[#3c3c3c] backdrop-blur-xl border-b border-[#1b1c24]/50 flex items-center justify-between px-4 select-none shrink-0 relative z-50 shadow-lg shadow-black/20">
         {openMenuDropdown && (
           <div 
             className="fixed inset-0 z-40 bg-transparent" 
@@ -1822,7 +1822,7 @@ Automated & Manual Testing
       <div className="flex-1 flex overflow-hidden">
         
         {/* 2. Left Activity Dock Icons (Nexera Ribbon Panel) */}
-        <aside className="w-14 bg-[#050608]/90 border-r border-[#1b1c24]/50 flex flex-col items-center py-4 justify-between shrink-0 select-none">
+        <aside className="w-14 bg-[#333333] border-r border-[#1b1c24]/50 flex flex-col items-center py-4 justify-between shrink-0 select-none">
           <div className="flex flex-col gap-4 items-center w-full">
             {/* Nexera "N" Logo with rotating gradient shield and neon shadow */}
             <div className="relative w-9 h-9 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-all duration-300 group/logo">
@@ -1919,6 +1919,17 @@ Automated & Manual Testing
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
             </button>
+
+            {/* Agents Panel Button */}
+            <button
+              onClick={() => handleDockIconClick("agents")}
+              className={`w-full h-12 relative flex items-center justify-center transition-all ${isSidebarOpen && activePanel === "agents" ? "text-[#3279F9] before:absolute before:left-0 before:w-[3px] before:h-7 before:bg-[#3279F9] before:rounded-r" : "text-[#5F7E97] hover:text-neutral-300 hover:bg-neutral-900/10"}`}
+              title="AI Agents"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 001.357 2.059l.537.268a1.5 1.5 0 01-.448 2.84l-.293.046a1.5 1.5 0 01-1.447-1.106l-.168-.643a1.5 1.5 0 00-1.447-1.106H9.25a1.5 1.5 0 00-1.447 1.106l-.168.643A1.5 1.5 0 016.19 20.9l-.293-.046a1.5 1.5 0 01-.448-2.84l.537-.268A2.25 2.25 0 007.343 15.5M14.25 3.104c.251.023.501.05.75.082M19.5 4.5c-1.206 1.804-2.95 3.097-4.956 3.726M5 14.5l-1.086 1.086a1.5 1.5 0 001.591 2.494L6 17.5" />
+              </svg>
+            </button>
           </div>
 
           <button
@@ -1935,12 +1946,12 @@ Automated & Manual Testing
 
         {/* 3. Primary Sidebar Panel Drawer (Obsidian Layout) */}
         {isSidebarOpen && (
-          <section className="w-72 bg-[#0F1115] border-r border-[#1E2024] flex flex-col justify-between shrink-0 overflow-hidden select-none">
+          <section className="w-72 bg-[#252526] border-r border-[#3c3c3c] flex flex-col justify-between shrink-0 overflow-hidden select-none">
           
           {/* Explorer Tab */}
           {activePanel === "explorer" && (
             <div className="flex flex-col flex-1 overflow-hidden font-mono">
-              <div className="p-4 border-b border-[#1E2024] flex flex-col gap-2 bg-[#0D0E12]">
+              <div className="p-4 border-b border-[#3c3c3c] flex flex-col gap-2 bg-[#2d2d30]">
                 <div className="flex items-center justify-between">
                   <span className="text-[9.5px] font-bold text-[#E3E3E2] uppercase tracking-wider font-mono">Workspace Explorer</span>
                   <div className="flex items-center gap-1">
@@ -1998,7 +2009,7 @@ Automated & Manual Testing
                   />
                 )}
                 {workspaceTree.length === 0 && !inlineCreate ? (
-                  <div className="text-[10px] text-neutral-600 p-3 bg-neutral-950/20 border border-[#16181C] rounded-lg">
+                  <div className="text-[10px] text-neutral-600 p-3 bg-neutral-950/20 border border-[#2b2b2b] rounded-lg">
                     Workspace is empty.
                   </div>
                 ) : (
@@ -2011,7 +2022,7 @@ Automated & Manual Testing
           {/* Search Tab */}
           {activePanel === "search" && (
             <div className="flex flex-col flex-1 overflow-hidden font-mono text-[10px]">
-              <div className="p-4 border-b border-[#1E2024] bg-[#0D0E12]">
+              <div className="p-4 border-b border-[#3c3c3c] bg-[#2d2d30]">
                 <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block mb-2">Scan Workspace Strings</span>
                 <div className="relative">
                   <input
@@ -2019,7 +2030,7 @@ Automated & Manual Testing
                     value={searchQuery}
                     onChange={(e) => handleWorkspaceQuerySearch(e.target.value)}
                     placeholder="Search query string..."
-                    className="w-full bg-black border border-[#16181C] rounded px-2 py-2 text-neutral-300 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-black border border-[#2b2b2b] rounded px-2 py-2 text-neutral-300 focus:outline-none focus:border-indigo-500"
                   />
                   {isSearching && (
                     <span className="absolute right-2.5 top-2.5 w-3.5 h-3.5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
@@ -2035,13 +2046,13 @@ Automated & Manual Testing
                     <div
                       key={idx}
                       onClick={() => handleOpenFile(res.file)}
-                      className="bg-[#090A0D]/50 hover:bg-neutral-900/30 border border-[#16181C] rounded-lg p-2.5 cursor-pointer leading-normal transition-all"
+                      className="bg-[#252526]/50 hover:bg-neutral-900/30 border border-[#2b2b2b] rounded-lg p-2.5 cursor-pointer leading-normal transition-all"
                     >
                       <div className="flex justify-between text-[8px] font-bold text-indigo-400 mb-1">
                         <span className="truncate max-w-[150px]">{res.file.split("/").pop()}</span>
                         <span className="text-neutral-600">LINE {res.line}</span>
                       </div>
-                      <p className="text-[9px] text-neutral-400 truncate font-mono bg-black/40 px-1.5 py-0.5 rounded border border-[#16181C]">{res.content}</p>
+                      <p className="text-[9px] text-neutral-400 truncate font-mono bg-black/40 px-1.5 py-0.5 rounded border border-[#2b2b2b]">{res.content}</p>
                     </div>
                   ))
                 )}
@@ -2052,20 +2063,20 @@ Automated & Manual Testing
           {/* Source Control Tab */}
           {activePanel === "git" && (
             <div className="flex flex-col flex-1 overflow-hidden font-mono text-[10px]">
-              <div className="p-4 border-b border-[#1E2024] bg-[#0D0E12] flex flex-col gap-1">
+              <div className="p-4 border-b border-[#3c3c3c] bg-[#2d2d30] flex flex-col gap-1">
                 <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block">Git Version Control</span>
                 <span className="text-[8.5px] text-[#3279F9] font-bold uppercase">🌿 ACTIVE BRANCH: {gitStatus.branch}</span>
               </div>
               
               <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 custom-scrollbar">
                 {/* Stage Commit form */}
-                <form onSubmit={handleGitCommitSubmit} className="bg-[#090A0D]/50 border border-[#16181C] rounded-xl p-3 flex flex-col gap-2">
+                <form onSubmit={handleGitCommitSubmit} className="bg-[#252526]/50 border border-[#2b2b2b] rounded-xl p-3 flex flex-col gap-2">
                   <span className="text-[8.5px] font-black text-amber-500 tracking-wider">STAGE & COMMIT</span>
                   <textarea
                     value={commitMessage}
                     onChange={(e) => setCommitMessage(e.target.value)}
                     placeholder="Commit message (Ctrl+Enter)..."
-                    className="w-full h-16 bg-black border border-[#16181C] rounded px-2.5 py-2 text-[10px] text-neutral-300 focus:outline-none focus:border-indigo-500 resize-none font-mono"
+                    className="w-full h-16 bg-black border border-[#2b2b2b] rounded px-2.5 py-2 text-[10px] text-neutral-300 focus:outline-none focus:border-indigo-500 resize-none font-mono"
                   />
                   <button
                     type="submit"
@@ -2087,7 +2098,7 @@ Automated & Manual Testing
                         <div
                           key={idx}
                           onClick={() => handleOpenFile(file.file)}
-                          className="bg-black/40 border border-[#16181C]/60 rounded px-2 py-1.5 flex items-center justify-between text-[9px] cursor-pointer hover:border-neutral-800 transition-colors"
+                          className="bg-black/40 border border-[#2b2b2b]/60 rounded px-2 py-1.5 flex items-center justify-between text-[9px] cursor-pointer hover:border-neutral-800 transition-colors"
                         >
                           <span className="text-neutral-400 truncate max-w-[180px] font-mono">{file.file}</span>
                           <span className={`px-1 py-0.5 rounded font-black text-[8px] ${file.status === "M" ? "text-amber-400 bg-amber-950/20" : "text-emerald-400 bg-emerald-950/20"}`}>
@@ -2104,7 +2115,7 @@ Automated & Manual Testing
                   <span className="text-[8px] font-extrabold text-neutral-500 tracking-wider">RECENT REVISIONS LOG</span>
                   <div className="flex flex-col gap-2 max-h-40 overflow-y-auto custom-scrollbar leading-relaxed">
                     {gitStatus.recent_commits.map((commit, idx) => (
-                      <div key={idx} className="border-b border-[#16181C]/80 pb-1.5 last:border-0">
+                      <div key={idx} className="border-b border-[#2b2b2b]/80 pb-1.5 last:border-0">
                         <div className="flex justify-between text-[8px] font-bold text-indigo-400">
                           <span>{commit.author}</span>
                           <span className="text-neutral-600">#{commit.commit_hash.substring(0, 7)}</span>
@@ -2122,7 +2133,7 @@ Automated & Manual Testing
           {/* Run and Debug Panel (Mirroring screenshot layout exactly!) */}
           {activePanel === "run" && (
             <div className="flex flex-col flex-1 overflow-hidden font-mono text-[10px]">
-              <div className="p-4 border-b border-[#1E2024] bg-[#0D0E12] flex flex-col gap-1">
+              <div className="p-4 border-b border-[#3c3c3c] bg-[#2d2d30] flex flex-col gap-1">
                 <div className="flex items-center justify-between">
                   <span className="text-[9.5px] font-bold text-neutral-400 uppercase tracking-widest block">Run and Debug</span>
                   <span className="text-neutral-500 hover:text-neutral-300 cursor-pointer">•••</span>
@@ -2155,7 +2166,7 @@ Automated & Manual Testing
                 </div>
 
                 {/* JS Debug Terminal option */}
-                <div className="flex flex-col gap-2 border-t border-[#16181C]/60 pt-3">
+                <div className="flex flex-col gap-2 border-t border-[#2b2b2b]/60 pt-3">
                   <button
                     onClick={() => {
                       addLog({ type: "system", message: "🐞 [Debugger]: Spawned dedicated JavaScript Debug Session." });
@@ -2170,7 +2181,7 @@ Automated & Manual Testing
                 </div>
 
                 {/* Debug URL option */}
-                <div className="flex flex-col gap-2 border-t border-[#16181C]/60 pt-3">
+                <div className="flex flex-col gap-2 border-t border-[#2b2b2b]/60 pt-3">
                   <button
                     onClick={() => {
                       const url = prompt("Enter URL to debug:", "http://localhost:3000");
@@ -2191,13 +2202,13 @@ Automated & Manual Testing
           {/* Extensions Panel (Mirroring screenshot layout exactly!) */}
           {activePanel === "extensions" && (
             <div className="flex flex-col flex-1 overflow-hidden font-mono text-[10px]">
-              <div className="p-4 border-b border-[#1E2024] bg-[#0D0E12] flex flex-col gap-1">
+              <div className="p-4 border-b border-[#3c3c3c] bg-[#2d2d30] flex flex-col gap-1">
                 <span className="text-[9.5px] font-bold text-neutral-400 uppercase tracking-widest block">Model Swarm Extensions</span>
                 <input
                   type="text"
                   placeholder="Search Extensions..."
                   disabled
-                  className="w-full bg-black/60 border border-[#1E2024] rounded px-2 py-1.5 text-neutral-500 select-none"
+                  className="w-full bg-black/60 border border-[#3c3c3c] rounded px-2 py-1.5 text-neutral-500 select-none"
                 />
                 <span className="text-[8px] text-[#3279F9]/70 font-mono mt-1 block leading-tight">
                   By default, Nexera OS uses local presets in its swarm sandbox.
@@ -2218,7 +2229,7 @@ Automated & Manual Testing
                       <div
                         key={ext.id}
                         onClick={() => toggleExtensionState(ext.id)}
-                        className={`border rounded-lg p-2 flex items-start gap-2.5 cursor-pointer transition-all ${ext.enabled ? "bg-neutral-950/60 border-[#16181C] hover:border-neutral-800" : "bg-neutral-950/20 border-neutral-950 text-neutral-600 opacity-60"}`}
+                        className={`border rounded-lg p-2 flex items-start gap-2.5 cursor-pointer transition-all ${ext.enabled ? "bg-neutral-950/60 border-[#2b2b2b] hover:border-neutral-800" : "bg-neutral-950/20 border-neutral-950 text-neutral-600 opacity-60"}`}
                       >
                         <div className="w-6.5 h-6.5 rounded bg-indigo-950/50 flex items-center justify-center font-black text-[10px] text-indigo-400 shrink-0 border border-indigo-900/30">
                           {ext.name.substring(0, 2).toUpperCase()}
@@ -2258,7 +2269,7 @@ Automated & Manual Testing
           {/* Brain / Shorthand Personalization Panel */}
           {activePanel === "brain" && (
             <div className="flex flex-col flex-1 overflow-hidden font-mono text-[10px]">
-              <div className="p-4 border-b border-[#1E2024] bg-[#0D0E12] flex flex-col gap-1">
+              <div className="p-4 border-b border-[#3c3c3c] bg-[#2d2d30] flex flex-col gap-1">
                 <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest block">Adaptive Personality Swarm</span>
                 <span className="text-[8px] text-emerald-400 font-bold uppercase">● Spell Auto-Heal Online</span>
               </div>
@@ -2266,22 +2277,22 @@ Automated & Manual Testing
               <div className="flex-1 p-3 overflow-y-auto flex flex-col gap-4 custom-scrollbar">
                 
                 {/* Tone analytics */}
-                <div className="bg-[#090A0D]/50 border border-[#16181C] rounded-xl p-3 flex flex-col gap-2 font-mono">
+                <div className="bg-[#252526]/50 border border-[#2b2b2b] rounded-xl p-3 flex flex-col gap-2 font-mono">
                   <span className="text-[8px] font-extrabold text-indigo-400 tracking-wider">STYLE PERCEPTION REPORT</span>
                   <div className="grid grid-cols-2 gap-2 text-[8px] text-neutral-500">
-                    <div className="bg-black/30 p-2 rounded border border-[#16181C] flex flex-col gap-0.5">
+                    <div className="bg-black/30 p-2 rounded border border-[#2b2b2b] flex flex-col gap-0.5">
                       <span>USER TONE</span>
                       <span className="text-[9px] font-bold text-neutral-300 truncate">{personalization.analytics.user_tone_perception}</span>
                     </div>
-                    <div className="bg-black/30 p-2 rounded border border-[#16181C] flex flex-col gap-0.5">
+                    <div className="bg-black/30 p-2 rounded border border-[#2b2b2b] flex flex-col gap-0.5">
                       <span>HEALING LEVEL</span>
                       <span className="text-[9px] font-bold text-emerald-400 uppercase">{personalization.analytics.adaptation_level}</span>
                     </div>
-                    <div className="bg-black/30 p-2 rounded border border-[#16181C] flex flex-col gap-0.5">
+                    <div className="bg-black/30 p-2 rounded border border-[#2b2b2b] flex flex-col gap-0.5">
                       <span>HEALS APPLIED</span>
                       <span className="text-[9px] font-bold text-amber-500">{personalization.analytics.typo_corrections_made}</span>
                     </div>
-                    <div className="bg-black/30 p-2 rounded border border-[#16181C] flex flex-col gap-0.5">
+                    <div className="bg-black/30 p-2 rounded border border-[#2b2b2b] flex flex-col gap-0.5">
                       <span>SHORTHANDS OUT</span>
                       <span className="text-[9px] font-bold text-indigo-400">{personalization.analytics.shorthands_applied}</span>
                     </div>
@@ -2289,22 +2300,22 @@ Automated & Manual Testing
                 </div>
 
                 {/* Intent Preview Box */}
-                <div className="bg-[#090A0D]/50 border border-[#16181C] rounded-xl p-3 flex flex-col gap-2">
+                <div className="bg-[#252526]/50 border border-[#2b2b2b] rounded-xl p-3 flex flex-col gap-2">
                   <span className="text-[8px] font-extrabold text-amber-400 tracking-wider">LIVE INTENT EXPANDER TESTER</span>
                   <input
                     type="text"
                     value={previewInput}
                     onChange={(e) => testExpandPrompt(e.target.value)}
                     placeholder="mkae api for db..."
-                    className="w-full bg-black border border-[#16181C] rounded px-2.5 py-1.5 text-[9px] text-neutral-300 focus:outline-none focus:border-indigo-500 font-mono"
+                    className="w-full bg-black border border-[#2b2b2b] rounded px-2.5 py-1.5 text-[9px] text-neutral-300 focus:outline-none focus:border-indigo-500 font-mono"
                   />
                   {previewOutput && (
-                    <div className="bg-black/60 border border-[#16181C] rounded p-2 text-[8.5px] font-mono leading-relaxed mt-1 flex flex-col gap-1">
+                    <div className="bg-black/60 border border-[#2b2b2b] rounded p-2 text-[8.5px] font-mono leading-relaxed mt-1 flex flex-col gap-1">
                       {previewOutput.typos_corrected.length > 0 && (
                         <span className="text-amber-400 font-bold">🪄 corrected: {previewOutput.typos_corrected.join(", ")}</span>
                       )}
                       <span className="text-indigo-400 font-bold">🔮 Expanded Prompt:</span>
-                      <p className="text-neutral-400 bg-[#040810] p-1.5 border border-[#16181C] rounded select-text">{previewOutput.expanded}</p>
+                      <p className="text-neutral-400 bg-[#040810] p-1.5 border border-[#2b2b2b] rounded select-text">{previewOutput.expanded}</p>
                     </div>
                   )}
                 </div>
@@ -2336,7 +2347,7 @@ Automated & Manual Testing
                   
                   <div className="flex flex-col gap-1 max-h-48 overflow-y-auto custom-scrollbar">
                     {Object.entries(personalization.shorthands).map(([trig, exp], idx) => (
-                      <div key={idx} className="bg-black/30 border border-[#1E2024] rounded p-2 flex items-start justify-between gap-2 group">
+                      <div key={idx} className="bg-black/30 border border-[#3c3c3c] rounded p-2 flex items-start justify-between gap-2 group">
                         <div className="min-w-0">
                           <span className="font-extrabold text-[#3279F9] text-[9.5px]">{trig}</span>
                           <p className="text-[8.5px] text-neutral-500 leading-normal truncate max-w-[200px]" title={exp}>{exp}</p>
@@ -2360,7 +2371,7 @@ Automated & Manual Testing
           {/* OS Viewport Drawer */}
           {activePanel === "viewport" && (
             <div className="flex flex-col flex-1 overflow-hidden font-mono text-[10px]">
-              <div className="p-4 border-b border-[#1E2024] bg-[#0D0E12] flex items-center justify-between">
+              <div className="p-4 border-b border-[#3c3c3c] bg-[#2d2d30] flex items-center justify-between">
                 <span className="text-[9.5px] font-bold text-neutral-400 uppercase tracking-widest font-mono">Viewport Simulation</span>
                 <button
                   onClick={handleCaptureScreen}
@@ -2374,7 +2385,7 @@ Automated & Manual Testing
               <div className="flex-1 p-3 overflow-y-auto flex flex-col gap-4 custom-scrollbar">
                 
                 {/* Screenshot monitor frame */}
-                <div className="w-full border border-[#16181C] bg-black/60 rounded-xl overflow-hidden aspect-video flex flex-col items-center justify-center relative shadow-inner group">
+                <div className="w-full border border-[#2b2b2b] bg-black/60 rounded-xl overflow-hidden aspect-video flex flex-col items-center justify-center relative shadow-inner group">
                   {screenshotData ? (
                     <img src={screenshotData} alt="Active Screen Frame" className="w-full h-full object-cover animate-fade-in" />
                   ) : (
@@ -2386,7 +2397,7 @@ Automated & Manual Testing
                 </div>
 
                 {/* Simulation inputs */}
-                <div className="bg-[#090A0D]/50 border border-[#16181C] rounded-xl p-3 flex flex-col gap-3 leading-snug">
+                <div className="bg-[#252526]/50 border border-[#2b2b2b] rounded-xl p-3 flex flex-col gap-3 leading-snug">
                   <span className="text-[8px] font-extrabold text-indigo-400 tracking-wider">REMOTE AUTOMATION ACTIONS</span>
                   
                   <div className="flex flex-col gap-1">
@@ -2394,7 +2405,7 @@ Automated & Manual Testing
                     <select
                       value={automationAction}
                       onChange={(e: any) => setAutomationAction(e.target.value)}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1.5 text-neutral-300 focus:outline-none focus:border-indigo-500"
+                      className="bg-black border border-[#2b2b2b] rounded px-2 py-1.5 text-neutral-300 focus:outline-none focus:border-indigo-500"
                     >
                       <option value="click">Simulate Mouse Click</option>
                       <option value="type">Type Keyboard String</option>
@@ -2410,7 +2421,7 @@ Automated & Manual Testing
                           type="number"
                           value={automationX}
                           onChange={(e) => setAutomationX(Number(e.target.value))}
-                          className="w-full bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                          className="w-full bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                         />
                       </div>
                       <div className="flex-1 flex flex-col gap-1">
@@ -2419,7 +2430,7 @@ Automated & Manual Testing
                           type="number"
                           value={automationY}
                           onChange={(e) => setAutomationY(Number(e.target.value))}
-                          className="w-full bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                          className="w-full bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                         />
                       </div>
                     </div>
@@ -2433,7 +2444,7 @@ Automated & Manual Testing
                         value={automationText}
                         onChange={(e) => setAutomationText(e.target.value)}
                         placeholder="Write string sequence..."
-                        className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                        className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                       />
                     </div>
                   )}
@@ -2445,7 +2456,7 @@ Automated & Manual Testing
                         type="text"
                         value={automationUrl}
                         onChange={(e) => setAutomationUrl(e.target.value)}
-                        className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                        className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                       />
                     </div>
                   )}
@@ -2460,7 +2471,7 @@ Automated & Manual Testing
                 </div>
 
                 {ocrText && (
-                  <div className="bg-[#03070E] border border-[#1E2024] rounded-xl p-3 text-[9px] font-mono text-neutral-500 leading-normal max-h-48 overflow-y-auto custom-scrollbar">
+                  <div className="bg-[#03070E] border border-[#3c3c3c] rounded-xl p-3 text-[9px] font-mono text-neutral-500 leading-normal max-h-48 overflow-y-auto custom-scrollbar">
                     <span className="text-[#3279F9] font-extrabold uppercase">OCR Output Capture:</span>
                     <p className="mt-1 select-text">{ocrText}</p>
                   </div>
@@ -2473,7 +2484,7 @@ Automated & Manual Testing
           {/* Settings Tab */}
           {activePanel === "settings" && (
             <div className="flex flex-col flex-1 overflow-hidden font-mono text-[10px]">
-              <div className="p-4 border-b border-[#1E2024] bg-[#0D0E12] flex items-center justify-between">
+              <div className="p-4 border-b border-[#3c3c3c] bg-[#2d2d30] flex items-center justify-between">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[9.5px] font-bold text-neutral-400 uppercase tracking-widest">Hardware Presets</span>
                   <span className="text-[8px] text-neutral-600 font-bold">REVISION VERSION: {configVersion}</span>
@@ -2490,7 +2501,7 @@ Automated & Manual Testing
               <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 custom-scrollbar">
                 
                 {/* Swarm Modelpres */}
-                <div className="bg-[#090A0D]/50 border border-[#1E2024] rounded-xl p-3 flex flex-col gap-3 leading-snug">
+                <div className="bg-[#252526]/50 border border-[#3c3c3c] rounded-xl p-3 flex flex-col gap-3 leading-snug">
                   <span className="text-[8px] font-extrabold text-[#3279F9] tracking-wider">SWARM LLM DETAILS</span>
                   
                   <div className="flex flex-col gap-2">
@@ -2504,8 +2515,8 @@ Automated & Manual Testing
                             onClick={() => handleProviderChange(agent.id)}
                             className={`group relative overflow-hidden rounded-xl border p-3 cursor-pointer transition-all duration-300 flex flex-col gap-2 select-none active:scale-[0.98] ${
                               isActive
-                                ? "bg-[#090A0D]/90 border-[#3279F9] shadow-[0_0_20px_rgba(50,121,249,0.15)] bg-gradient-to-br from-[#090A0D]/90 to-[#0e1726]/40"
-                                : "bg-[#090A0D]/60 border-[#1E2024] hover:border-neutral-700 hover:bg-[#0c0d12]/80"
+                                ? "bg-[#252526]/90 border-[#3279F9] shadow-[0_0_20px_rgba(50,121,249,0.15)] bg-gradient-to-br from-[#090A0D]/90 to-[#0e1726]/40"
+                                : "bg-[#252526]/60 border-[#3c3c3c] hover:border-neutral-700 hover:bg-[#0c0d12]/80"
                             }`}
                           >
                             {/* Top row: Agent Name, active dot + badge */}
@@ -2575,7 +2586,7 @@ Automated & Manual Testing
                       type="text"
                       value={configModelName}
                       onChange={(e) => setConfigModelName(e.target.value)}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none focus:border-indigo-500"
+                      className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none focus:border-indigo-500"
                       placeholder="e.g. qwen2.5-coder:7b"
                     />
                   </div>
@@ -2602,7 +2613,7 @@ Automated & Manual Testing
                       type="number"
                       value={configMaxTokens}
                       onChange={(e) => setConfigMaxTokens(parseInt(e.target.value))}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                      className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                     />
                   </div>
 
@@ -2612,13 +2623,13 @@ Automated & Manual Testing
                       type="text"
                       value={configBaseUrl}
                       onChange={(e) => setConfigBaseUrl(e.target.value)}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                      className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                     />
                   </div>
                 </div>
 
                 {/* Cloud keys */}
-                <div className="bg-[#090A0D]/50 border border-[#16181C] rounded-xl p-3 flex flex-col gap-3">
+                <div className="bg-[#252526]/50 border border-[#2b2b2b] rounded-xl p-3 flex flex-col gap-3">
                   <span className="text-[8px] font-extrabold text-amber-500 tracking-wider">CLOUD INTEGRATION KEYS</span>
                   
                   <div className="flex flex-col gap-1">
@@ -2627,7 +2638,7 @@ Automated & Manual Testing
                       type="password"
                       value={configGeminiKey}
                       onChange={(e) => setConfigGeminiKey(e.target.value)}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                      className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                       placeholder={configGeminiKey ? "••••••••••••••••" : "AIzaSy..."}
                     />
                   </div>
@@ -2638,7 +2649,7 @@ Automated & Manual Testing
                       type="password"
                       value={configOpenaiKey}
                       onChange={(e) => setConfigOpenaiKey(e.target.value)}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                      className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                       placeholder={configOpenaiKey ? "••••••••••••••••" : "sk-proj-..."}
                     />
                   </div>
@@ -2649,14 +2660,14 @@ Automated & Manual Testing
                       type="password"
                       value={configAnthropicKey}
                       onChange={(e) => setConfigAnthropicKey(e.target.value)}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                      className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                       placeholder={configAnthropicKey ? "••••••••••••••••" : "sk-ant-..."}
                     />
                   </div>
                 </div>
 
                 {/* Host limits */}
-                <div className="bg-[#090A0D]/50 border border-[#16181C] rounded-xl p-3 flex flex-col gap-3">
+                <div className="bg-[#252526]/50 border border-[#2b2b2b] rounded-xl p-3 flex flex-col gap-3">
                   <span className="text-[8px] font-extrabold text-indigo-400 tracking-wider">HARDWARE ALLOCATION Preset</span>
                   
                   <div className="flex flex-col gap-1">
@@ -2665,7 +2676,7 @@ Automated & Manual Testing
                       type="text"
                       value={configGpu}
                       onChange={(e) => setConfigGpu(e.target.value)}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                      className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                       placeholder="e.g. NVIDIA RTX 4060"
                     />
                   </div>
@@ -2676,7 +2687,7 @@ Automated & Manual Testing
                       type="number"
                       value={configVram}
                       onChange={(e) => setConfigVram(parseInt(e.target.value))}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                      className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                     />
                   </div>
 
@@ -2686,7 +2697,7 @@ Automated & Manual Testing
                       type="text"
                       value={configCpu}
                       onChange={(e) => setConfigCpu(e.target.value)}
-                      className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                      className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                       placeholder="Intel Core i7"
                     />
                   </div>
@@ -2698,7 +2709,7 @@ Automated & Manual Testing
                         type="number"
                         value={configCpuCores}
                         onChange={(e) => setConfigCpuCores(parseInt(e.target.value))}
-                        className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                        className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                       />
                     </div>
                     <div className="flex-1 flex flex-col gap-1">
@@ -2707,18 +2718,18 @@ Automated & Manual Testing
                         type="number"
                         value={configRam}
                         onChange={(e) => setConfigRam(parseInt(e.target.value))}
-                        className="bg-black border border-[#16181C] rounded px-2 py-1 text-neutral-300 focus:outline-none"
+                        className="bg-black border border-[#2b2b2b] rounded px-2 py-1 text-neutral-300 focus:outline-none"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* Revision logs */}
-                <div className="bg-[#090A0D]/50 border border-[#16181C] rounded-xl p-3 flex flex-col gap-2">
+                <div className="bg-[#252526]/50 border border-[#2b2b2b] rounded-xl p-3 flex flex-col gap-2">
                   <span className="text-[8px] font-extrabold text-[#8B5CF6] tracking-wider">CONFIG REVISIONS HISTORIC</span>
                   <div className="flex flex-col gap-2 max-h-36 overflow-y-auto custom-scrollbar text-[8.5px]">
                     {configHistory.map((item, idx) => (
-                      <div key={idx} className="border-b border-[#16181C] pb-1.5 last:border-0">
+                      <div key={idx} className="border-b border-[#2b2b2b] pb-1.5 last:border-0">
                         <div className="flex justify-between text-neutral-500">
                           <span className="text-[#8B5CF6] font-bold">REV #{item.version}</span>
                           <span>{new Date(item.timestamp).toLocaleTimeString()}</span>
@@ -2740,8 +2751,70 @@ Automated & Manual Testing
             </div>
           )}
 
+          {/* Agents Panel — Local / Gemini / Claude */}
+          {activePanel === "agents" && (
+            <div className="flex flex-col flex-1 overflow-hidden font-mono">
+              <div className="px-4 py-2.5 border-b border-[#3c3c3c] bg-[#2d2d30] flex items-center justify-between shrink-0">
+                <span className="text-[9.5px] font-bold text-[#cccccc] uppercase tracking-[1.8px]">AGENTS</span>
+                <span className="text-[8px] text-[#808080]">Select active provider</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5 custom-scrollbar">
+                {/* LOCAL OLLAMA */}
+                <div onClick={() => setConfigProvider("ollama")} className={`rounded border p-3 flex flex-col gap-2 cursor-pointer transition-all ${configProvider === "ollama" ? "border-[#3279F9] bg-[#094771]/20" : "border-[#3c3c3c] bg-[#252526] hover:border-[#555555]"}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${configProvider === "ollama" ? "bg-[#3279F9] shadow-[0_0_6px_#3279F9]" : "bg-[#555555]"}`} />
+                      <span className="text-[11px] font-bold text-[#d4d4d4]">Local — Ollama</span>
+                    </div>
+                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded font-mono ${configProvider === "ollama" ? "bg-[#3279F9]/20 text-[#3279F9]" : "bg-[#2d2d30] text-[#808080]"}`}>{configProvider === "ollama" ? "● ACTIVE" : "LOCAL"}</span>
+                  </div>
+                  <input type="text" value={configModelName} onChange={(e) => { setConfigModelName(e.target.value); }} onClick={(e) => e.stopPropagation()} placeholder="qwen2.5-coder:7b-instruct-q4_K_M" className="bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2 py-1 text-[9.5px] text-[#d4d4d4] focus:outline-none focus:border-[#3279F9] font-mono w-full" />
+                  <input type="text" value={configBaseUrl} onChange={(e) => setConfigBaseUrl(e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="http://127.0.0.1:11434" className="bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2 py-1 text-[9.5px] text-[#808080] focus:outline-none focus:border-[#3279F9] font-mono w-full" />
+                </div>
+                {/* GEMINI */}
+                <div onClick={() => { setConfigProvider("gemini"); if (!configModelName.startsWith("gemini")) setConfigModelName("gemini-2.0-flash"); }} className={`rounded border p-3 flex flex-col gap-2 cursor-pointer transition-all ${configProvider === "gemini" ? "border-[#3279F9] bg-[#094771]/20" : "border-[#3c3c3c] bg-[#252526] hover:border-[#555555]"}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${configProvider === "gemini" ? "bg-[#3279F9] shadow-[0_0_6px_#3279F9]" : "bg-[#555555]"}`} />
+                      <span className="text-[11px] font-bold text-[#d4d4d4]">Gemini</span>
+                      <span className="text-[8px] text-[#808080] font-mono">Google</span>
+                    </div>
+                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded font-mono ${configProvider === "gemini" ? "bg-[#3279F9]/20 text-[#3279F9]" : "bg-[#2d2d30] text-[#808080]"}`}>{configProvider === "gemini" ? "● ACTIVE" : "CLOUD"}</span>
+                  </div>
+                  <select value={configProvider === "gemini" ? configModelName : "gemini-2.0-flash"} onChange={(e) => setConfigModelName(e.target.value)} onClick={(e) => e.stopPropagation()} className="bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2 py-1 text-[9.5px] text-[#d4d4d4] focus:outline-none focus:border-[#3279F9] font-mono w-full">
+                    <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                    <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                    <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                    <option value="gemini-2.0-pro-exp">gemini-2.0-pro-exp</option>
+                  </select>
+                  <input type="password" value={configGeminiKey} onChange={(e) => setConfigGeminiKey(e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="Gemini API Key" className="bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2 py-1 text-[9.5px] text-[#d4d4d4] focus:outline-none focus:border-[#3279F9] font-mono w-full" />
+                </div>
+                {/* CLAUDE */}
+                <div onClick={() => { setConfigProvider("anthropic"); if (!configModelName.startsWith("claude")) setConfigModelName("claude-opus-4-7"); }} className={`rounded border p-3 flex flex-col gap-2 cursor-pointer transition-all ${configProvider === "anthropic" ? "border-[#3279F9] bg-[#094771]/20" : "border-[#3c3c3c] bg-[#252526] hover:border-[#555555]"}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${configProvider === "anthropic" ? "bg-[#3279F9] shadow-[0_0_6px_#3279F9]" : "bg-[#555555]"}`} />
+                      <span className="text-[11px] font-bold text-[#d4d4d4]">Claude</span>
+                      <span className="text-[8px] text-[#808080] font-mono">Anthropic</span>
+                    </div>
+                    <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded font-mono ${configProvider === "anthropic" ? "bg-[#3279F9]/20 text-[#3279F9]" : "bg-[#2d2d30] text-[#808080]"}`}>{configProvider === "anthropic" ? "● ACTIVE" : "CLOUD"}</span>
+                  </div>
+                  <select value={configProvider === "anthropic" ? configModelName : "claude-opus-4-7"} onChange={(e) => setConfigModelName(e.target.value)} onClick={(e) => e.stopPropagation()} className="bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2 py-1 text-[9.5px] text-[#d4d4d4] focus:outline-none focus:border-[#3279F9] font-mono w-full">
+                    <option value="claude-opus-4-7">claude-opus-4-7</option>
+                    <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+                    <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+                  </select>
+                  <input type="password" value={configAnthropicKey} onChange={(e) => setConfigAnthropicKey(e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="Anthropic API Key" className="bg-[#1e1e1e] border border-[#3c3c3c] rounded px-2 py-1 text-[9.5px] text-[#d4d4d4] focus:outline-none focus:border-[#3279F9] font-mono w-full" />
+                </div>
+              </div>
+              <div className="p-3 border-t border-[#3c3c3c] shrink-0">
+                <button onClick={saveConfigToServer} className="w-full bg-[#3279F9] hover:bg-[#2563eb] text-white rounded py-2 text-[10px] font-bold font-mono tracking-wider transition-colors active:scale-[0.98]">SAVE &amp; APPLY</button>
+              </div>
+            </div>
+          )}
+
           {/* Active provider details */}
-          <div className="p-4 border-t border-[#1E2024] bg-[#0D0E12] flex flex-col gap-1.5 font-mono select-none">
+          <div className="p-4 border-t border-[#3c3c3c] bg-[#2d2d30] flex flex-col gap-1.5 font-mono select-none">
             <span className="text-[8px] font-bold text-neutral-500 tracking-widest">ACTIVE PROCESSOR PRESETS</span>
             <div className="flex items-center justify-between text-[9px]">
               <span className="text-[#3279F9] font-bold uppercase">{configProvider}</span>
@@ -2752,10 +2825,10 @@ Automated & Manual Testing
       )}
 
         {/* 4. Center Workspace Pane (Syntax Editor / Welcome Dashboard) */}
-        <section className="flex-1 flex flex-col overflow-hidden bg-[#07080A] relative">
+        <section className="flex-1 flex flex-col overflow-hidden bg-[#1e1e1e] relative">
           
           {/* File Open Tabs */}
-          <div className="h-11 bg-[#0D0E12] border-b border-[#1E2024] flex items-center px-3 overflow-x-auto shrink-0 select-none custom-scrollbar">
+          <div className="h-11 bg-[#2d2d30] border-b border-[#3c3c3c] flex items-center px-3 overflow-x-auto shrink-0 select-none custom-scrollbar">
             {openTabs.map((tab, idx) => {
               const isActive = activeTab === tab;
               const isUnsaved = unsavedChanges[tab];
@@ -2798,7 +2871,7 @@ Automated & Manual Testing
               <div className="flex-1 flex flex-col overflow-hidden">
                 
                 {/* Dedicated Nexera Editor Header */}
-                <div className="h-12 bg-[#0D0E12] border-b border-[#1E2024] px-5 flex items-center justify-between shrink-0 select-none">
+                <div className="h-12 bg-[#2d2d30] border-b border-[#3c3c3c] px-5 flex items-center justify-between shrink-0 select-none">
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-mono font-bold text-neutral-200">{activeTab.split("/").pop()}</span>
                     <span className="text-[9.5px] font-mono text-neutral-500">• less than a minute ago</span>
@@ -2841,7 +2914,7 @@ Automated & Manual Testing
                 </div>
 
                 {/* Breadcrumbs trail matching screenshot exactly */}
-                <div className="h-8 bg-[#08090B] border-b border-[#1E2024] px-5 flex items-center gap-1.5 text-[10px] font-mono text-[#5F7E97] shrink-0 select-none">
+                <div className="h-8 bg-[#1e1e1e] border-b border-[#3c3c3c] px-5 flex items-center gap-1.5 text-[10px] font-mono text-[#5F7E97] shrink-0 select-none">
                   <span className="text-[#3279F9] font-bold">Nexera</span>
                   {activeTab.split("/").filter(Boolean).map((part, idx) => (
                     <React.Fragment key={idx}>
@@ -2878,7 +2951,7 @@ Automated & Manual Testing
                         value={revisionNotes}
                         onChange={(e) => setRevisionNotes(e.target.value)}
                         placeholder="Add build revision notes..."
-                        className="bg-black border border-[#16181C] px-3 py-1.5 text-[9.5px] rounded focus:outline-none focus:border-indigo-500 text-neutral-300 w-44 placeholder:text-neutral-600 font-mono"
+                        className="bg-black border border-[#2b2b2b] px-3 py-1.5 text-[9.5px] rounded focus:outline-none focus:border-indigo-500 text-neutral-300 w-44 placeholder:text-neutral-600 font-mono"
                       />
                       <button
                         onClick={() => handleSubmitApproval("approved")}
@@ -2899,8 +2972,8 @@ Automated & Manual Testing
                 )}
 
                 {/* Editor Textarea with line numbers */}
-                <div className="flex-1 overflow-auto p-5 font-mono text-xs flex leading-relaxed select-text bg-[#08090B]">
-                  <div className="text-neutral-700 text-right pr-4 select-none border-r border-[#16181C] mr-4 flex flex-col font-mono select-none">
+                <div className="flex-1 overflow-auto p-5 font-mono text-xs flex leading-relaxed select-text bg-[#1e1e1e]">
+                  <div className="text-neutral-700 text-right pr-4 select-none border-r border-[#2b2b2b] mr-4 flex flex-col font-mono select-none">
                     {Array.from({ length: (fileContents[activeTab] || "").split("\n").length || 1 }).map((_, i) => (
                       <span key={i} className="text-[10px] h-[18px] inline-block font-mono">{i + 1}</span>
                     ))}
@@ -2929,7 +3002,7 @@ Automated & Manual Testing
 
                 {/* Floating active block indicator for pending approval matching screenshot perfectly */}
                 {pendingApproval && pendingApproval.filepath === activeTab && (
-                  <div className="absolute top-32 right-8 bg-[#0D0E12]/95 border border-emerald-500/30 rounded-lg px-3 py-2 flex items-center gap-3 shadow-xl z-20 font-mono text-[9px] backdrop-blur-sm">
+                  <div className="absolute top-32 right-8 bg-[#2d2d30]/95 border border-emerald-500/30 rounded-lg px-3 py-2 flex items-center gap-3 shadow-xl z-20 font-mono text-[9px] backdrop-blur-sm">
                     <span className="text-emerald-400 font-bold">🪄 Staged Code Block</span>
                     <button
                       onClick={() => handleSubmitApproval("approved")}
@@ -2948,7 +3021,7 @@ Automated & Manual Testing
 
                 {/* Sticky bottom floating overlay for CTO approvals matching screenshot perfectly */}
                 {pendingApproval && pendingApproval.filepath === activeTab && (
-                  <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-[#0D0E12]/95 backdrop-blur-md border border-neutral-800 rounded-full px-5 py-2.5 flex items-center gap-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)] z-20 font-mono text-[10px] select-none">
+                  <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-[#2d2d30]/95 backdrop-blur-md border border-neutral-800 rounded-full px-5 py-2.5 flex items-center gap-4 shadow-[0_10px_30px_rgba(0,0,0,0.5)] z-20 font-mono text-[10px] select-none">
                     <button
                       onClick={() => handleSubmitApproval("approved")}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-full px-4 py-1.5 font-bold shadow-lg shadow-emerald-700/20 active:scale-[0.96] transition-all flex items-center gap-1.5"
@@ -2970,7 +3043,7 @@ Automated & Manual Testing
                 )}
 
                 {/* Editor Footer */}
-                <div className="h-7 bg-[#090A0D] border-t border-[#16181C] px-5 py-1 flex items-center justify-between text-[9px] font-mono text-neutral-500 shrink-0 select-none">
+                <div className="h-7 bg-[#252526] border-t border-[#2b2b2b] px-5 py-1 flex items-center justify-between text-[9px] font-mono text-neutral-500 shrink-0 select-none">
                   <span>workspace / {activeTab}</span>
                   <div className="flex items-center gap-5">
                     {unsavedChanges[activeTab] && (
@@ -2984,7 +3057,7 @@ Automated & Manual Testing
               </div>
             ) : (
               /* Pixel perfect Welcome Dashboard for Nexera OS */
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 select-none bg-radial-glow relative bg-[#07080A]">
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 select-none bg-radial-glow relative bg-[#1e1e1e]">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl" />
                 
                 {/* Nexera stylized N logo with a high-fidelity glowing ring */}
@@ -3008,7 +3081,7 @@ Automated & Manual Testing
                 
                 {/* Visual Welcome shortcuts with 3D mechanical keycaps */}
                 <div className="mt-8 flex flex-col gap-4 max-w-sm w-full font-mono text-[10px]">
-                  <div className="flex items-center justify-between bg-[#090A0D]/50 border border-[#1b1c24]/50 px-4 py-3 rounded-lg hover:border-neutral-800 transition-colors">
+                  <div className="flex items-center justify-between bg-[#252526]/50 border border-[#1b1c24]/50 px-4 py-3 rounded-lg hover:border-neutral-800 transition-colors">
                     <span className="text-neutral-400 font-bold">Code with Swarm Agent</span>
                     <button
                       onClick={() => promptInputRef.current?.focus()}
@@ -3018,7 +3091,7 @@ Automated & Manual Testing
                     </button>
                   </div>
                   
-                  <div className="flex items-center justify-between bg-[#090A0D]/50 border border-[#1b1c24]/50 px-4 py-3 rounded-lg hover:border-neutral-800 transition-colors">
+                  <div className="flex items-center justify-between bg-[#252526]/50 border border-[#1b1c24]/50 px-4 py-3 rounded-lg hover:border-neutral-800 transition-colors">
                     <span className="text-neutral-400 font-bold">Focus Swarm Command Panel</span>
                     <div className="flex items-center gap-1.5 select-none pr-1">
                       <kbd className="keycap">Ctrl</kbd>
@@ -3037,8 +3110,8 @@ Automated & Manual Testing
 
           {/* Bottom Console terminal */}
           {isTerminalOpen && (
-            <div className="h-44 bg-[#0D0E12] border-t border-[#16181C] flex flex-col overflow-hidden shrink-0">
-              <div className="px-5 border-b border-[#16181C] bg-[#07080A] flex items-center justify-between text-[9px] font-black text-neutral-400 tracking-wider font-mono select-none">
+            <div className="h-44 bg-[#2d2d30] border-t border-[#2b2b2b] flex flex-col overflow-hidden shrink-0">
+              <div className="px-5 border-b border-[#2b2b2b] bg-[#1e1e1e] flex items-center justify-between text-[9px] font-black text-neutral-400 tracking-wider font-mono select-none">
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => setActiveConsoleTab("system")}
@@ -3091,7 +3164,7 @@ Automated & Manual Testing
               </div>
               
               {activeConsoleTab === "system" ? (
-                <div className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-relaxed flex flex-col gap-1.5 bg-[#07080A] select-text custom-scrollbar font-mono">
+                <div className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-relaxed flex flex-col gap-1.5 bg-[#1e1e1e] select-text custom-scrollbar font-mono">
                   {logs.length === 0 ? (
                     <span className="text-neutral-700 tracking-wide">Shell Console active. Awaiting swarm log inputs...</span>
                   ) : (
@@ -3121,7 +3194,7 @@ Automated & Manual Testing
                           </div>
                         );
                       } else if (log.type === "agent") {
-                        let agentStyle = "border-l-2 border-indigo-500/50 bg-[#090A0D]/50 text-indigo-300";
+                        let agentStyle = "border-l-2 border-indigo-500/50 bg-[#252526]/50 text-indigo-300";
                         if (log.agent === "CEO") {
                           agentStyle = "border-l-2 border-violet-500/80 bg-violet-950/10 text-violet-300";
                         } else if (log.agent === "Engineer") {
@@ -3144,7 +3217,7 @@ Automated & Manual Testing
               ) : (
                 <div 
                   onClick={() => powershellInputRef.current?.focus()}
-                  className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-normal bg-[#07080A] select-text custom-scrollbar font-mono flex flex-col cursor-text"
+                  className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-normal bg-[#1e1e1e] select-text custom-scrollbar font-mono flex flex-col cursor-text"
                 >
                   <pre className="whitespace-pre-wrap text-neutral-300 leading-relaxed font-mono">
                     {terminalBuffer || "Initializing PowerShell secure stream...\n"}
@@ -3172,10 +3245,10 @@ Automated & Manual Testing
 
         {/* 5. Right-Hand Swarm Chat Sidebar (Accordion DX style) */}
         {isRightSidebarOpen && (
-          <section className="w-80 bg-[#090A0D] border-l border-[#16181C] flex flex-col overflow-hidden shrink-0 select-none">
+          <section className="w-80 bg-[#252526] border-l border-[#2b2b2b] flex flex-col overflow-hidden shrink-0 select-none">
             
             {/* Premium Header */}
-            <div className="p-4 border-b border-[#16181C] bg-[#02050A] flex items-center justify-between">
+            <div className="p-4 border-b border-[#2b2b2b] bg-[#2d2d30] flex items-center justify-between">
               <span className="text-[10px] font-bold text-transparent bg-clip-text bg-gradient-to-r from-neutral-200 to-[#E3E3E2] uppercase tracking-widest font-mono flex items-center gap-1.5 cursor-pointer">
                 Nexera Autonomous OS Bootstr <span className="text-[7px] text-neutral-500 font-bold">▼</span>
               </span>
@@ -3247,7 +3320,7 @@ Automated & Manual Testing
                         {/* Artifact Card rendering */}
                         {msg.hasArtifact && (
                           <div className="bg-gradient-to-br from-[#040810] to-[#02050A] border border-indigo-950 rounded-xl p-3 shadow-xl flex flex-col gap-2.5 max-w-[92%] ml-7">
-                            <div className="flex items-center justify-between border-b border-[#16181C]/80 pb-2">
+                            <div className="flex items-center justify-between border-b border-[#2b2b2b]/80 pb-2">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-[10px] text-indigo-400">📝</span>
                                 <span className="text-[9px] font-bold text-neutral-300 font-mono tracking-wide">{msg.artifactTitle}</span>
@@ -3259,7 +3332,7 @@ Automated & Manual Testing
                             <p className="text-[8.5px] font-mono text-neutral-500 leading-relaxed">
                               {msg.artifactSummary}
                             </p>
-                            <div className="flex items-center justify-between text-[8px] font-mono text-neutral-600 bg-neutral-950/30 p-1.5 rounded border border-[#16181C]">
+                            <div className="flex items-center justify-between text-[8px] font-mono text-neutral-600 bg-neutral-950/30 p-1.5 rounded border border-[#2b2b2b]">
                               <span>98% MATCH</span>
                               <span>1 NEW FILE</span>
                               <span>0 DELETED</span>
@@ -3286,7 +3359,7 @@ Automated & Manual Testing
                           <div className="flex flex-col gap-2 w-full pl-7">
                             
                             {/* Accordion 1: File Traversal */}
-                            <div className="border border-[#16181C] bg-[#02050A]/40 rounded-lg overflow-hidden transition-all">
+                            <div className="border border-[#2b2b2b] bg-[#2d2d30]/40 rounded-lg overflow-hidden transition-all">
                               <button
                                 onClick={() => toggleCard("explored")}
                                 className="w-full px-3 py-2 flex items-center justify-between font-mono text-[9px] font-bold text-neutral-400 hover:bg-neutral-900/40"
@@ -3295,14 +3368,14 @@ Automated & Manual Testing
                                 <span className="text-neutral-600 text-[8px]">{expandedCards["explored"] ? "▼" : "◀"}</span>
                               </button>
                               {expandedCards["explored"] && (
-                                <div className="px-3 pb-3 pt-1 border-t border-[#16181C] bg-black/30 font-mono text-[8.5px] text-neutral-500 leading-normal select-text">
+                                <div className="px-3 pb-3 pt-1 border-t border-[#2b2b2b] bg-black/30 font-mono text-[8.5px] text-neutral-500 leading-normal select-text">
                                   Indexed workspace targets: `d:/Nexera/mobile/src/app/page.tsx` read completed successfully with 1518 lines parsed.
                                 </div>
                               )}
                             </div>
 
                             {/* Accordion 2: Thought logs */}
-                            <div className="border border-[#16181C] bg-[#02050A]/40 rounded-lg overflow-hidden transition-all">
+                            <div className="border border-[#2b2b2b] bg-[#2d2d30]/40 rounded-lg overflow-hidden transition-all">
                               <button
                                 onClick={() => toggleCard("thought")}
                                 className="w-full px-3 py-2 flex items-center justify-between font-mono text-[9px] font-bold text-neutral-400 hover:bg-neutral-900/40"
@@ -3311,14 +3384,14 @@ Automated & Manual Testing
                                 <span className="text-neutral-600 text-[8px]">{expandedCards["thought"] ? "▼" : "◀"}</span>
                               </button>
                               {expandedCards["thought"] && (
-                                <div className="px-3 pb-3 pt-1 border-t border-[#16181C] bg-black/30 font-mono text-[8.5px] text-neutral-500 leading-normal select-text">
+                                <div className="px-3 pb-3 pt-1 border-t border-[#2b2b2b] bg-black/30 font-mono text-[8.5px] text-neutral-500 leading-normal select-text">
                                   Applying semantic search matrices. Synthesizing user visual layout with existing Next.js PWA active hooks and routes. Ready to compile layout replacement.
                                 </div>
                               )}
                             </div>
 
                             {/* Accordion 3: Diffs & Accept/Reject Controls */}
-                            <div className="border border-[#16181C] bg-[#02050A]/40 rounded-lg overflow-hidden transition-all">
+                            <div className="border border-[#2b2b2b] bg-[#2d2d30]/40 rounded-lg overflow-hidden transition-all">
                               <button
                                 onClick={() => toggleCard("git-diff")}
                                 className="w-full px-3 py-2 flex items-center justify-between font-mono text-[9px] font-bold text-neutral-400 hover:bg-neutral-900/40"
@@ -3327,17 +3400,17 @@ Automated & Manual Testing
                                 <span className="text-neutral-600 text-[8px]">{expandedCards["git-diff"] ? "▼" : "◀"}</span>
                               </button>
                               {expandedCards["git-diff"] && (
-                                <div className="px-3 pb-3 pt-1 border-t border-[#16181C] bg-black/30 font-mono text-[8.5px] text-neutral-500 leading-normal select-text flex flex-col gap-2">
+                                <div className="px-3 pb-3 pt-1 border-t border-[#2b2b2b] bg-black/30 font-mono text-[8.5px] text-neutral-500 leading-normal select-text flex flex-col gap-2">
                                   <div className="flex flex-col gap-1 text-[8px] text-neutral-400 max-h-36 overflow-y-auto custom-scrollbar font-mono">
-                                    <div className="flex justify-between border-b border-[#16181C] pb-1">
+                                    <div className="flex justify-between border-b border-[#2b2b2b] pb-1">
                                       <span className="text-emerald-400">page.tsx</span>
                                       <span className="text-neutral-600">+185 / -12</span>
                                     </div>
-                                    <div className="flex justify-between border-b border-[#16181C] pb-1">
+                                    <div className="flex justify-between border-b border-[#2b2b2b] pb-1">
                                       <span className="text-emerald-400">main.py</span>
                                       <span className="text-neutral-600">+94 / -4</span>
                                     </div>
-                                    <div className="flex justify-between border-b border-[#16181C] pb-1">
+                                    <div className="flex justify-between border-b border-[#2b2b2b] pb-1">
                                       <span className="text-emerald-400">pattern_engine.py</span>
                                       <span className="text-neutral-600">+103 / -2</span>
                                     </div>
@@ -3370,10 +3443,10 @@ Automated & Manual Testing
               </div>
 
               {/* Bottom Input block */}
-              <form onSubmit={handleStartTask} className="flex flex-col gap-2.5 pt-3 border-t border-[#16181C] bg-[#090A0D]/60 select-none">
+              <form onSubmit={handleStartTask} className="flex flex-col gap-2.5 pt-3 border-t border-[#2b2b2b] bg-[#252526]/60 select-none">
                 
                 {/* Horizontal Files Review / Accept Bar matching screenshot perfectly */}
-                <div className="flex items-center justify-between bg-[#040810]/60 border border-[#16181C]/60 rounded-xl px-3 py-2 text-[9px] font-mono">
+                <div className="flex items-center justify-between bg-[#040810]/60 border border-[#2b2b2b]/60 rounded-xl px-3 py-2 text-[9px] font-mono">
                   {gitStatus.modified_files.length > 0 ? (
                     <>
                       <div className="flex items-center gap-1.5 text-neutral-400">
@@ -3439,7 +3512,7 @@ Automated & Manual Testing
                       testExpandPrompt(e.target.value); // test expansion real-time in brain tab
                     }}
                     placeholder="Ask anything, @ to mention, / for actions"
-                    className="w-full bg-black/60 border border-[#1E2024] rounded-xl pl-3.5 pr-10 py-3 text-xs text-neutral-200 placeholder:text-neutral-700 focus:outline-none focus:border-[#3279F9]/80 focus:shadow-[0_0_15px_rgba(50,121,249,0.15)] transition-all font-mono select-text"
+                    className="w-full bg-black/60 border border-[#3c3c3c] rounded-xl pl-3.5 pr-10 py-3 text-xs text-neutral-200 placeholder:text-neutral-700 focus:outline-none focus:border-[#3279F9]/80 focus:shadow-[0_0_15px_rgba(50,121,249,0.15)] transition-all font-mono select-text"
                   />
                   
                   {/* Microphone speech trigger */}
@@ -3449,7 +3522,7 @@ Automated & Manual Testing
                     className={`absolute right-2.5 p-1.5 rounded-lg border transition-all active:scale-95 ${
                       isListening
                         ? "bg-rose-500/20 border-rose-500 text-rose-400"
-                        : "bg-black/60 border-[#16181C] text-neutral-500 hover:text-neutral-300"
+                        : "bg-black/60 border-[#2b2b2b] text-neutral-500 hover:text-neutral-300"
                     }`}
                     title="Speak command query input"
                   >
@@ -3473,7 +3546,7 @@ Automated & Manual Testing
                           className={`px-2.5 py-0.5 rounded-full border text-[8.5px] font-bold font-mono transition-all duration-200 flex items-center gap-1.5 active:scale-95 select-none ${
                             isActive
                               ? "bg-[#3279F9]/10 border-[#3279F9] text-white shadow-[0_0_8px_rgba(50,121,249,0.15)]"
-                              : "bg-[#090A0D]/40 border-[#1E2024] text-neutral-500 hover:text-neutral-300 hover:border-neutral-700"
+                              : "bg-[#252526]/40 border-[#3c3c3c] text-neutral-500 hover:text-neutral-300 hover:border-neutral-700"
                           }`}
                           title={`${agent.name} (${agent.model})`}
                         >
@@ -3521,7 +3594,7 @@ Automated & Manual Testing
       </div>
 
       {/* 6. Status Bar (Bottom Ribbon) */}
-      <footer className="h-6 bg-[#090A0D] border-t border-[#16181C] px-4 flex items-center justify-between text-[10px] font-mono text-neutral-500 shrink-0 select-none">
+      <footer className="h-6 bg-[#252526] border-t border-[#2b2b2b] px-4 flex items-center justify-between text-[10px] font-mono text-neutral-500 shrink-0 select-none">
         
         {/* Left Side Statuses */}
         <div className="flex items-center gap-4">
@@ -3655,7 +3728,7 @@ function FileTreeNode({
         </div>
 
         {isOpen && (
-          <div className="pl-3 border-l border-[#16181C] ml-2 flex flex-col mt-0.5">
+          <div className="pl-3 border-l border-[#2b2b2b] ml-2 flex flex-col mt-0.5">
             {inlineCreate && inlineCreate.parentPath === node.path && (
               <InlineCreateInput
                 isDir={inlineCreate.isDir}
