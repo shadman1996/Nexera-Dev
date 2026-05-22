@@ -1,6 +1,27 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Editor from "@monaco-editor/react";
+
+const getLanguageFromPath = (path: string | null): string => {
+  if (!path) return "plaintext";
+  const ext = path.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "py": return "python";
+    case "tsx": return "typescript";
+    case "ts": return "typescript";
+    case "jsx": return "javascript";
+    case "js": return "javascript";
+    case "json": return "json";
+    case "md": return "markdown";
+    case "css": return "css";
+    case "html": return "html";
+    case "sh": return "shell";
+    case "ps1": return "powershell";
+    default: return "plaintext";
+  }
+};
+
 
 interface LogMessage {
   type: string;

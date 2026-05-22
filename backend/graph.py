@@ -304,17 +304,38 @@ class QA(Agent):
             
         # 2. Run Python unittest on the workspace
         import subprocess
+        from backend.tools.sandbox_manager import DockerSandbox
+        sandbox = DockerSandbox(os.path.abspath(os.path.join(os.getcwd(), "workspace")))
+        
         try:
             await self.log("⚙️ Spawning workspace unittest runner process...")
-            result = await asyncio.to_thread(
-                subprocess.run,
-                "python -m unittest discover -s workspace -p \"test_*.py\"",
-                shell=True,
-                cwd=os.getcwd(),
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            
+            if sandbox.is_active:
+                # Docker Sandbox Active: Run inside the container
+                cmd = ["python", "-m", "unittest", "discover", "-s", ".", "-p", "test_*.py"]
+                wrapped_cmd = sandbox.wrap_command(cmd)
+                await self.log(f"🐳 Sandbox Mode: Executing unit tests inside Docker sandbox: {' '.join(wrapped_cmd)}")
+                
+                result = await asyncio.to_thread(
+                    subprocess.run,
+                    wrapped_cmd,
+                    shell=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            else:
+                # Fallback / Host Mode
+                await self.log("⚠️ Host Mode: [WARNING] Docker not detected. Trapping shell commands in host workspace boundaries.")
+                result = await asyncio.to_thread(
+                    subprocess.run,
+                    "python -m unittest discover -s workspace -p \"test_*.py\"",
+                    shell=True,
+                    cwd=os.getcwd(),
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
             
             if result.returncode == 0:
                 await self.log("✅ Workspace tests PASSED successfully!")

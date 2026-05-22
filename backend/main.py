@@ -14,6 +14,12 @@ WORKSPACE_DIR = os.path.abspath(os.path.join(os.getcwd(), "workspace"))
 if not os.path.exists(WORKSPACE_DIR):
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
 
+from backend.tools.sandbox_manager import DockerSandbox
+sandbox = DockerSandbox(WORKSPACE_DIR)
+# Perform a quick background status check
+sandbox.check_docker_status()
+
+
 def secure_path(relative_path: str) -> str:
     target = os.path.abspath(os.path.join(WORKSPACE_DIR, relative_path))
     if not os.path.normcase(target).startswith(os.path.normcase(WORKSPACE_DIR)):
@@ -61,21 +67,34 @@ async def websocket_endpoint(websocket: WebSocket):
 async def terminal_websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     
+    # Select spawner parameters dynamically based on sandbox state
+    spawner_args = sandbox.get_terminal_spawner()
+    is_docker = sandbox.is_active
+    
+    if is_docker:
+        await websocket.send_json({
+            "type": "terminal_out",
+            "data": "🐳 [INFO] Trapping interactive terminal inside secure Docker sandbox.\r\n"
+        })
+    else:
+        await websocket.send_json({
+            "type": "terminal_out",
+            "data": "⚠️ [WARNING] Docker sandbox not available. Running in host fallback mode.\r\n"
+        })
+        
     process = None
     try:
-        # Spawn isolated powershell process bound to WORKSPACE_DIR
+        # Spawn isolated container bash or local powershell process bound to WORKSPACE_DIR
         process = await asyncio.create_subprocess_exec(
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
+            spawner_args[0],
+            *spawner_args[1:],
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=WORKSPACE_DIR
         )
     except Exception as e:
-        await websocket.send_json({"type": "terminal_out", "data": f"Failed to spawn PowerShell: {e}\n"})
+        await websocket.send_json({"type": "terminal_out", "data": f"Failed to spawn terminal: {e}\n"})
         await websocket.close()
         return
 
@@ -136,13 +155,23 @@ async def terminal_websocket_endpoint(websocket: WebSocket):
                     except Exception:
                         pass
                 
-                await websocket.send_json({"type": "terminal_out", "data": "\r\n🔄 Resetting PowerShell session...\r\n"})
+                # Check status again on reset
+                spawner_args = sandbox.get_terminal_spawner()
+                is_docker = sandbox.is_active
+                if is_docker:
+                    await websocket.send_json({
+                        "type": "terminal_out",
+                        "data": "\r\n🔄 Resetting secure Docker sandbox session...\r\n"
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "terminal_out",
+                        "data": "\r\n🔄 Resetting PowerShell session...\r\n"
+                    })
                 
                 process = await asyncio.create_subprocess_exec(
-                    "powershell.exe",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
+                    spawner_args[0],
+                    *spawner_args[1:],
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -748,7 +777,72 @@ async def run_self_tests(request: Request):
         }
         
     try:
-        test_res = await asyncio.to_thread(run_tests_sync)
+        if sandbox.is_active:
+            await websocket_manager.broadcast({
+                "type": "system",
+                "message": "🐳 [Self-Tester]: Running unit tests securely inside Docker container..."
+            })
+            
+            # Python script to run inside the container's workspace
+            payload = (
+                "import unittest, io, time, json\n"
+                "class StructuredTestResult(unittest.TextTestResult):\n"
+                "    def __init__(self, *args, **kwargs):\n"
+                "        super().__init__(*args, **kwargs)\n"
+                "        self.results = []\n"
+                "    def addSuccess(self, test):\n"
+                "        super().addSuccess(test)\n"
+                "        self.results.append({'name': str(test), 'status': 'passed', 'message': ''})\n"
+                "    def addFailure(self, test, err):\n"
+                "        super().addFailure(test, err)\n"
+                "        self.results.append({'name': str(test), 'status': 'failed', 'message': self._exc_info_to_string(err, test)})\n"
+                "    def addError(self, test, err):\n"
+                "        super().addError(test, err)\n"
+                "        self.results.append({'name': str(test), 'status': 'error', 'message': self._exc_info_to_string(err, test)})\n"
+                "\n"
+                "loader = unittest.TestLoader()\n"
+                "suite = loader.discover(start_dir='/workspace', pattern='test_*.py')\n"
+                "stream = io.StringIO()\n"
+                "runner = unittest.TextTestRunner(stream=stream, resultclass=StructuredTestResult, verbosity=2)\n"
+                "start_t = time.time()\n"
+                "res = runner.run(suite)\n"
+                "duration = time.time() - start_t\n"
+                "stream.seek(0)\n"
+                "logs = stream.read()\n"
+                "print(json.dumps({\n"
+                "    'total': res.testsRun,\n"
+                "    'passed': res.testsRun - len(res.failures) - len(res.errors),\n"
+                "    'failed': len(res.failures) + len(res.errors),\n"
+                "    'duration': round(duration, 3),\n"
+                "    'tests': getattr(res, 'results', []),\n"
+                "    'logs': logs\n"
+                "}))\n"
+            )
+            
+            cmd = ["python", "-c", payload]
+            wrapped_cmd = sandbox.wrap_command(cmd)
+            
+            res = await asyncio.to_thread(
+                subprocess.run,
+                wrapped_cmd,
+                shell=False,
+                capture_output=True,
+                text=True,
+                timeout=45
+            )
+            
+            if res.returncode == 0:
+                import json
+                test_res = json.loads(res.stdout.strip())
+            else:
+                stderr_err = res.stderr or res.stdout
+                raise Exception(f"Container test execution failed: {stderr_err}")
+        else:
+            await websocket_manager.broadcast({
+                "type": "system",
+                "message": "⚠️ [Self-Tester]: [WARNING] Docker not detected. Executing terminal tests on local host."
+            })
+            test_res = await asyncio.to_thread(run_tests_sync)
     except Exception as e:
         test_res = {
             "total": 0,
