@@ -532,6 +532,27 @@ Automated & Manual Testing
 
   // Connect components on mount
   useEffect(() => {
+    // Intercept all outgoing REST API fetch requests to automatically inject X-Nexera-Key header
+    const originalFetch = window.fetch;
+    window.fetch = function (input, init) {
+      const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      if (urlStr.includes("/api/")) {
+        const key = "nexera_master_key_2026";
+        if (init) {
+          const headers = new Headers(init.headers || {});
+          headers.set("X-Nexera-Key", key);
+          init.headers = headers;
+        } else {
+          init = {
+            headers: {
+              "X-Nexera-Key": key
+            }
+          };
+        }
+      }
+      return originalFetch.call(this, input, init);
+    };
+
     connectWebSocket();
     connectTerminalWebSocket();
     refreshFileTree();
@@ -541,6 +562,7 @@ Automated & Manual Testing
     fetchSandboxStatus();
     const interval = setInterval(checkPendingApproval, 1500);
     return () => {
+      window.fetch = originalFetch;
       if (socketRef.current) {
         socketRef.current.onclose = null;
         socketRef.current.close();

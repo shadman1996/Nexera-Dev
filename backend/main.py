@@ -87,6 +87,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path.startswith("/api") and request.method != "OPTIONS":
+            config_data = load_config()
+            expected_key = config_data.get("security", {}).get("api_key")
+            if expected_key:
+                actual_key = request.headers.get("X-Nexera-Key")
+                if not actual_key or actual_key != expected_key:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"message": "Unauthorized: Invalid or missing X-Nexera-Key header."}
+                    )
+        return await call_next(request)
+
+app.add_middleware(APIKeyMiddleware)
+
 websocket_manager = ConnectionManager()
 
 # Global state to track active tasks

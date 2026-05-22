@@ -71,6 +71,7 @@
     }
   },
   "security": {
+    "api_key": "nexera_master_key_2026",
     "sandbox_root": "./workspace",
     "allowed_write_paths": [
       "./backend",
