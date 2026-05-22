@@ -139,3 +139,103 @@ Because developer agents can execute terminal inputs and modify files, safety la
 ### 4.2 Telemetry & Financial Cost Tracking
 *   **Budget Ceiling Policies**: The engine calculates cumulative spending across providers using realtime pricing rates. Upon reaching user-specified cost thresholds (e.g., $5.00/hour), all swarm tasks suspend.
 *   **Audit Logging**: Prompt payloads and response matrices compile in a persistent SQLite ledger (`db.sqlite3`), facilitating complete transparency and retrospective code-synthesis debugging.
+
+---
+
+## 5. Modular Extension API & Integration SDK Architecture
+
+To support a growing ecosystem, the platform implements a **Universal Extension Architecture** resembling VS Code’s APIs. This permits third-party developer toolchains, custom AST compilers, visualizers, and proprietary LLM models to integrate directly into the Nexera core.
+
+```mermaid
+graph TD
+    ext["Third-Party Extension Folder"] --> manifest["manifest.json / package.json"]
+    ext --> clientScript["Client Render Script (iframe/WebComponent)"]
+    ext --> backendScript["Backend Runner (WASM / Node Process)"]
+
+    subgraph PlatformSDK ["Nexera Extension SDK Core"]
+        extEditor["nexera.editor (Decorations, Code Actions)"]
+        extWorkspace["nexera.workspace (CRUD, Watcher, AST)"]
+        extSwarm["nexera.swarm (Custom Agents, Hooks)"]
+        extTerminal["nexera.terminal (Isolated Sessions)"]
+    end
+
+    backendScript -->|IPC / WebSockets| PlatformSDK
+    clientScript -->|PostMessage API| MonacoCanvas["Monaco Editor UI"]
+```
+
+### 5.1 Extension Structure & Manifest
+Each extension is structured as a standalone module containing a key definition manifest (`manifest.json`):
+```json
+{
+  "name": "playwright-visualizer",
+  "version": "1.0.0",
+  "publisher": "Nexera Core",
+  "engines": {
+    "nexera": "^1.0.0"
+  },
+  "contributes": {
+    "views": {
+      "subsidebar": [
+        { "id": "playwright-viewport", "name": "Playwright Viewport" }
+      ]
+    },
+    "commands": [
+      { "command": "playwright.runTest", "title": "Run Playwright Test Visualizer" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "playwright.runTest", "group": "navigation" }
+      ]
+    }
+  },
+  "main": "./dist/backend.js",
+  "browser": "./dist/frontend.js"
+}
+```
+
+### 5.2 The `nexera` SDK Namespace Surface
+Extensions access core editor, workspace, and swarm operations using a unified, typesafe JavaScript/Python SDK namespace:
+
+*   **`nexera.workspace`**:
+    ```typescript
+    // Read or write files securely
+    const content = await nexera.workspace.readFile("app.py");
+    // Register custom watchers to react to file system modifications
+    nexera.workspace.onDidSaveTextDocument((doc) => {
+      linter.evaluate(doc);
+    });
+    ```
+*   **`nexera.editor`**:
+    ```typescript
+    // Add custom hover commands, inline markers, or text decorations
+    nexera.editor.registerCodeActionProvider("python", {
+      provideCodeActions(document, range) {
+        return [{ title: "🛠️ Fix with Swarm", command: "swarm.healCode" }];
+      }
+    });
+    ```
+*   **`nexera.swarm`**:
+    ```typescript
+    // Register custom specialized agent nodes inside the active swarm
+    nexera.swarm.registerAgent({
+      id: "SecurityAuditor",
+      role: "Vulnerability Scanner",
+      systemPrompt: "Review code blocks for OWASP vulnerabilities...",
+      onPostExecute: async (code) => {
+         return scanBuffer(code);
+      }
+    });
+    ```
+*   **`nexera.terminal`**:
+    ```typescript
+    // Execute isolated shell tasks inside the micro-VM context
+    const terminal = await nexera.terminal.createTerminal("Powershell Worker");
+    terminal.sendText("pytest -v");
+    ```
+
+### 5.3 Extension Execution Sandboxing
+To ensure third-party extensions do not crash the primary IDE client or compromise user file trees, the platform enforces strict separation:
+*   **Decoupled Host Processes**: Extension backends run in secondary, sandboxed subprocess environments (e.g. lightweight Deno/Node isolates or WASM runtimes) carrying zero-privilege tokens.
+*   **UI Sandboxing (Iframe Isolation)**: Extension visual panel components are rendered within secure, sandboxed HTML `<iframe>` viewports using restricted `sandbox="allow-scripts"` parameters, interacting with Monaco/IDE containers solely via the HTML5 `postMessage` gateway.
+*   **RPC Messaging Gateway**: All calls between the host IDE process and the extension sandboxes are marshalled across an RPC JSON-WebSocket layer, maintaining a robust boundary for absolute crash resistance.
+
