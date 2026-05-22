@@ -3,10 +3,61 @@ import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from typing import Optional
 from backend.websocket_manager import ConnectionManager
 from backend.tools.screenshot_tool import capture_desktop
 from backend.graph import run_task, approval_queue
 from backend.config import load_config, save_config
+
+# ── Request models ─────────────────────────────────────────────
+class TaskRequest(BaseModel):
+    task: str = Field(..., min_length=1, max_length=8000)
+
+class ApprovalRequest(BaseModel):
+    status: str = Field(..., pattern="^(approved|rejected)$")
+    revision_notes: Optional[str] = Field(default="", max_length=2000)
+
+class FileSaveRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+    content: str = Field(default="")
+
+class FileCreateRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+    is_dir: bool = Field(default=False)
+
+class FileDeleteRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+
+class GitCommitRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=500)
+
+class AutomationRunRequest(BaseModel):
+    url: str = Field(..., min_length=4)
+
+class IntentPreviewRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=4000)
+
+class CoordinatesRequest(BaseModel):
+    x: int = Field(..., ge=0)
+    y: int = Field(..., ge=0)
+
+class KeyboardTypeRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=1000)
+
+class ShorthandSaveRequest(BaseModel):
+    trigger: str = Field(..., min_length=1)
+    expansion: str = Field(..., min_length=1)
+
+class ShorthandDeleteRequest(BaseModel):
+    trigger: str = Field(..., min_length=1)
+
+class AutomationRequest(BaseModel):
+    action: str = Field(..., pattern="^(click|type|crawl)$")
+    x: Optional[int] = Field(default=None, ge=0)
+    y: Optional[int] = Field(default=None, ge=0)
+    text: Optional[str] = Field(default=None, min_length=1, max_length=1000)
+    url: Optional[str] = Field(default=None, min_length=4)
 
 app = FastAPI(title="Nexera Developer Core", version="1.0.0")
 
@@ -268,18 +319,12 @@ async def read_workspace_file(path: str):
         return JSONResponse(status_code=500, content={"message": f"Read error: {str(e)}"})
 
 @app.post("/api/workspace/save")
-async def save_workspace_file(request: Request):
+async def save_workspace_file(body: FileSaveRequest):
     try:
-        data = await request.json()
-        path = data.get("path")
-        content = data.get("content", "")
-        if not path:
-            return JSONResponse(status_code=400, content={"message": "Path is required"})
-        
-        abs_path = secure_path(path)
+        abs_path = secure_path(body.path)
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
         with open(abs_path, "w", encoding="utf-8") as f:
-            f.write(content)
+            f.write(body.content)
         return JSONResponse(content={"message": "File saved successfully"})
     except ValueError as ve:
         return JSONResponse(status_code=403, content={"message": str(ve)})
@@ -287,37 +332,26 @@ async def save_workspace_file(request: Request):
         return JSONResponse(status_code=500, content={"message": f"Save error: {str(e)}"})
 
 @app.post("/api/workspace/create")
-async def create_workspace_item(request: Request):
+async def create_workspace_item(body: FileCreateRequest):
     try:
-        data = await request.json()
-        path = data.get("path")
-        is_dir = data.get("is_dir", False)
-        if not path:
-            return JSONResponse(status_code=400, content={"message": "Path is required"})
-        
-        abs_path = secure_path(path)
-        if is_dir:
+        abs_path = secure_path(body.path)
+        if body.is_dir:
             os.makedirs(abs_path, exist_ok=True)
         else:
             os.makedirs(os.path.dirname(abs_path), exist_ok=True)
             if not os.path.exists(abs_path):
                 with open(abs_path, "w", encoding="utf-8") as f:
                     f.write("")
-        return JSONResponse(content={"message": f"{'Directory' if is_dir else 'File'} created successfully"})
+        return JSONResponse(content={"message": f"{'Directory' if body.is_dir else 'File'} created successfully"})
     except ValueError as ve:
         return JSONResponse(status_code=403, content={"message": str(ve)})
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"Create error: {str(e)}"})
 
 @app.post("/api/workspace/delete")
-async def delete_workspace_item(request: Request):
+async def delete_workspace_item(body: FileDeleteRequest):
     try:
-        data = await request.json()
-        path = data.get("path")
-        if not path:
-            return JSONResponse(status_code=400, content={"message": "Path is required"})
-        
-        abs_path = secure_path(path)
+        abs_path = secure_path(body.path)
         if os.path.exists(abs_path):
             if os.path.isdir(abs_path):
                 import shutil
@@ -339,15 +373,26 @@ async def get_status():
     return {
         "status": "online",
         "model": model_name,
-        "engine": f"{provider.capitalize()} Core"
+        "engine": f"{provider.capitalize()} Core",
+        "sandbox": sandbox.is_active
     }
+
+@app.get("/api/sandbox/status")
+async def get_sandbox_status():
+    """Returns whether the Docker sandbox is available and active."""
+    is_active = sandbox.check_docker_status()
+    return JSONResponse(content={
+        "active": is_active,
+        "mode": "docker" if is_active else "host",
+        "container": sandbox.container_name if is_active else None
+    })
 
 @app.get("/api/config")
 async def get_config_api():
     return JSONResponse(content=load_config())
 
 @app.post("/api/config/save")
-async def save_config_api(request: Request):
+async def save_config_api(request: Request):  # keeps raw Request — config payload is open-ended dict
     try:
         data = await request.json()
         success = save_config(data)
@@ -376,15 +421,11 @@ async def get_pending_approval():
     })
 
 @app.post("/api/approvals/submit")
-async def submit_approval(request: Request):
+async def submit_approval(body: ApprovalRequest):
     """Submits a decision ('approved' or 'rejected') with revision notes."""
-    data = await request.json()
-    status = data.get("status") # 'approved' or 'rejected'
-    notes = data.get("revision_notes", "")
+    status = body.status
+    notes = body.revision_notes or ""
     
-    if status not in ["approved", "rejected"]:
-        return JSONResponse(status_code=400, content={"message": "Invalid approval status"})
-        
     approval_queue["status"] = status
     approval_queue["notes"] = notes
     approval_queue["pending"] = None  # clear immediately so frontend poll stops showing the banner
@@ -401,12 +442,8 @@ async def submit_approval(request: Request):
 # ───────────────────────────────────────────────────────────────
 
 @app.post("/api/start")
-async def start_task(request: Request):
-    data = await request.json()
-    raw_task = data.get('task', '')
-    
-    if not raw_task:
-        return JSONResponse(status_code=400, content={"message": "No task prompt provided"})
+async def start_task(body: TaskRequest):
+    raw_task = body.task
         
     # Preprocess casual typing and expand shorthands using the pattern engine
     from backend.pattern_engine import clean_and_expand_prompt
@@ -498,31 +535,24 @@ async def get_patterns():
     return JSONResponse(content=load_patterns_config())
 
 @app.post("/api/patterns/shorthand")
-async def save_shorthand_api(request: Request):
+async def save_shorthand_api(body: ShorthandSaveRequest):
     from backend.pattern_engine import add_shorthand
-    data = await request.json()
-    trigger = data.get("trigger", "").strip().lower()
-    expansion = data.get("expansion", "").strip()
-    if not trigger or not expansion:
-        return JSONResponse(status_code=400, content={"message": "Trigger and expansion required"})
+    trigger = body.trigger.strip().lower()
+    expansion = body.expansion.strip()
     success = add_shorthand(trigger, expansion)
     return JSONResponse(content={"success": success, "message": "Shorthand trigger successfully saved"})
 
 @app.post("/api/patterns/shorthand/delete")
-async def delete_shorthand_api(request: Request):
+async def delete_shorthand_api(body: ShorthandDeleteRequest):
     from backend.pattern_engine import delete_shorthand
-    data = await request.json()
-    trigger = data.get("trigger", "").strip().lower()
-    if not trigger:
-        return JSONResponse(status_code=400, content={"message": "Trigger required"})
+    trigger = body.trigger.strip().lower()
     success = delete_shorthand(trigger)
     return JSONResponse(content={"success": success, "message": "Shorthand trigger successfully deleted"})
 
 @app.post("/api/patterns/test")
-async def test_pattern_expansion(request: Request):
+async def test_pattern_expansion(body: IntentPreviewRequest):
     from backend.pattern_engine import clean_and_expand_prompt
-    data = await request.json()
-    prompt = data.get("prompt", "").strip()
+    prompt = body.prompt.strip()
     res = clean_and_expand_prompt(prompt, record_stats=False)
     return JSONResponse(content=res)
 
@@ -584,10 +614,9 @@ async def get_git_status():
     })
 
 @app.post("/api/git/commit")
-async def commit_git_changes(request: Request):
+async def commit_git_changes(body: GitCommitRequest):
     from backend.tools.git_ops import git_add, git_commit
-    data = await request.json()
-    message = data.get("message", "Update from Nexera OS").strip()
+    message = body.message.strip()
     
     try:
         # Run add all inside workspace
@@ -607,10 +636,9 @@ async def commit_git_changes(request: Request):
 # ───────────────────────────────────────────────────────────────
 
 @app.post("/api/automation/run")
-async def run_desktop_automation(request: Request):
+async def run_desktop_automation(body: AutomationRequest):
     from backend.tools.automation_ops import trigger_mouse_click, trigger_key_sequence, run_playwright_crawl
-    data = await request.json()
-    action = data.get("action", "") # 'click', 'type', 'crawl'
+    action = body.action
     
     await websocket_manager.broadcast({
         "type": "system",
@@ -619,15 +647,29 @@ async def run_desktop_automation(request: Request):
     
     res = {"success": False, "log": "Unknown action"}
     if action == "click":
-        x = int(data.get("x", 0))
-        y = int(data.get("y", 0))
-        res = trigger_mouse_click(x, y)
+        if body.x is None or body.y is None:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "x"], "msg": "x and y coordinates required for click", "type": "value_error.missing"}]})
+        try:
+            coords = CoordinatesRequest(x=body.x, y=body.y)
+        except Exception as val_err:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "coordinates"], "msg": str(val_err), "type": "value_error"}]})
+        res = trigger_mouse_click(coords.x, coords.y)
     elif action == "type":
-        text = data.get("text", "")
-        res = trigger_key_sequence(text)
+        if body.text is None:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "text"], "msg": "text is required for type action", "type": "value_error.missing"}]})
+        try:
+            kbd = KeyboardTypeRequest(text=body.text)
+        except Exception as val_err:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "text"], "msg": str(val_err), "type": "value_error"}]})
+        res = trigger_key_sequence(kbd.text)
     elif action == "crawl":
-        url = data.get("url", "")
-        res = await run_playwright_crawl(url)
+        if body.url is None:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "url"], "msg": "url is required for crawl action", "type": "value_error.missing"}]})
+        try:
+            crawl_req = AutomationRunRequest(url=body.url)
+        except Exception as val_err:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "url"], "msg": str(val_err), "type": "value_error"}]})
+        res = await run_playwright_crawl(crawl_req.url)
         
     await websocket_manager.broadcast({
         "type": "system",

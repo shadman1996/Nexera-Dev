@@ -110,6 +110,7 @@ export default function NexeraDesktopIDE() {
   const [isExecuting, setIsExecuting] = useState(false);
   const [logs, setLogs] = useState<LogMessage[]>([]);
   const [wsStatus, setWsStatus] = useState("disconnected");
+  const [sandboxMode, setSandboxMode] = useState<"docker" | "host" | "unknown">("unknown");
 
   // Self-Testing & Diagnostic Dashboard States
   const [testRunning, setTestRunning] = useState(false);
@@ -407,6 +408,7 @@ Automated & Manual Testing
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
 
   const socketRef = useRef<WebSocket | null>(null);
   const terminalSocketRef = useRef<WebSocket | null>(null);
@@ -516,6 +518,18 @@ Automated & Manual Testing
     };
   }, [isListening]);
 
+  const fetchSandboxStatus = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/sandbox/status");
+      if (res.ok) {
+        const data = await res.json();
+        setSandboxMode(data.mode as "docker" | "host");
+      }
+    } catch {
+      setSandboxMode("host");
+    }
+  };
+
   // Connect components on mount
   useEffect(() => {
     connectWebSocket();
@@ -524,6 +538,7 @@ Automated & Manual Testing
     loadConfigFromServer();
     loadGitStatus();
     loadPersonalizationPatterns();
+    fetchSandboxStatus();
     const interval = setInterval(checkPendingApproval, 1500);
     return () => {
       if (socketRef.current) {
@@ -1017,7 +1032,8 @@ Automated & Manual Testing
     } catch (e) {}
   };
 
-  const speakResponse = (text: string) => {
+  const speakResponse = (text: string, force = false) => {
+    if (isMuted && !force) return;
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
       const cleanText = text.replace(/\[.*?\]/g, "").replace(/[^a-zA-Z0-9.,!? ]/g, "");
@@ -1839,11 +1855,10 @@ Automated & Manual Testing
           </nav>
         </div>
 
-        {/* Global window title */}
-        <div className="absolute left-1/2 -translate-x-1/2 hidden lg:flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#3279F9] animate-ping" />
-          <span className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-neutral-200 via-white to-neutral-400 tracking-wider font-mono">
-            d: - Nexera{activeTab ? ` - ${activeTab.split("/").pop()}` : ""}
+        {/* Global window title — matches Antigravity IDE screenshot */}
+        <div className="absolute left-1/2 -translate-x-1/2 hidden lg:flex items-center pointer-events-none select-none">
+          <span className="text-[11px] text-[#cccccc] font-normal font-sans">
+            d: · Antigravity IDE{activeTab ? ` — ${activeTab.split("/").pop()}` : ""}
           </span>
         </div>
 
@@ -1900,9 +1915,16 @@ Automated & Manual Testing
             </button>
           </div>
           
-          <span className={`px-2 py-0.5 rounded text-[8px] font-mono tracking-widest ${wsStatus === "connected" ? "bg-emerald-950/40 text-emerald-400 border border-emerald-900/60" : "bg-rose-950/40 text-rose-400 border border-rose-900/60"}`}>
-            ● LOCAL CORE: {wsStatus.toUpperCase()}
-          </span>
+          <button
+            onClick={() => window.location.reload()}
+            className={`px-2.5 py-1 rounded text-[10px] font-sans font-medium flex items-center gap-1.5 transition-colors ${
+              wsStatus === "connected"
+                ? "bg-emerald-700 hover:bg-emerald-600 text-white"
+                : "bg-[#252526] border border-[#3c3c3c] text-[#808080] hover:text-neutral-300"
+            }`}
+          >
+            {wsStatus === "connected" ? "● Connected" : "Reconnect →"}
+          </button>
         </div>
       </header>
 
@@ -3084,39 +3106,53 @@ Automated & Manual Testing
         {/* 4. Center Workspace Pane (Syntax Editor / Welcome Dashboard) */}
         <section className="flex-1 flex flex-col overflow-hidden bg-[#1e1e1e] relative">
           
-          {/* File Open Tabs */}
-          <div className="h-11 bg-[#2d2d30] border-b border-[#3c3c3c] flex items-center px-3 overflow-x-auto shrink-0 select-none custom-scrollbar">
+          {/* File Open Tabs — flat VS Code style */}
+          <div className="h-9 bg-[#2d2d30] border-b border-[#252526] flex items-end overflow-x-auto shrink-0 select-none custom-scrollbar">
             {openTabs.map((tab, idx) => {
               const isActive = activeTab === tab;
               const isUnsaved = unsavedChanges[tab];
               const isStaged = pendingApproval && pendingApproval.filepath === tab;
-              
-              const ext = tab.split(".").pop();
-              let fileIcon = "📄";
-              if (ext === "py") fileIcon = "🐍";
-              else if (ext === "json") fileIcon = "⚙️";
-              else if (ext === "md") fileIcon = "📝";
+              const ext = tab.split(".").pop()?.toLowerCase() ?? "";
+              const iconColor =
+                ext === "py" ? "#3B9FE8"
+                : ext === "tsx" || ext === "ts" ? "#4EC9B0"
+                : ext === "js" || ext === "jsx" ? "#CBCB41"
+                : ext === "json" ? "#CBCB41"
+                : ext === "md" ? "#519ABA"
+                : ext === "css" ? "#56B6C2"
+                : ext === "ps1" ? "#2472C8"
+                : "#cccccc";
+              const iconLabel =
+                ext === "py" ? "py"
+                : ext === "tsx" ? "tsx"
+                : ext === "ts" ? "ts"
+                : ext === "js" || ext === "jsx" ? "js"
+                : ext === "json" ? "{}"
+                : ext === "md" ? "md"
+                : ext === "css" ? "css"
+                : ext === "ps1" ? "ps1"
+                : ext ?? "txt";
 
               return (
                 <div
                   key={`${tab}-${idx}`}
                   onClick={() => setActiveTab(tab)}
-                  className={`h-7 px-3.5 rounded-full mr-2 flex items-center gap-2 cursor-pointer text-[10.5px] font-mono transition-all duration-300 select-none ${
+                  className={`h-full px-3 flex items-center gap-1.5 cursor-pointer text-[11px] font-mono shrink-0 border-r border-[#252526] transition-colors relative group ${
                     isActive
-                      ? "bg-[#0d121f] text-[#3279F9] font-bold border border-[#3279F9]/40 shadow-[0_0_12px_rgba(50,121,249,0.12)]"
-                      : "bg-[#252526]/30 border border-transparent text-[#5F7E97] hover:bg-[#252526]/70 hover:text-neutral-200"
-                  } ${isUnsaved ? "border-amber-500/50 text-amber-400 font-medium" : ""}`}
+                      ? "bg-[#1e1e1e] text-[#cccccc]"
+                      : "bg-[#2d2d30] text-[#808080] hover:text-[#cccccc] hover:bg-[#1e1e1e]/60"
+                  }`}
+                  style={isActive ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
                 >
-                  <span className="text-[11px]">{fileIcon}</span>
-                  <span className="tracking-wide">{tab.split("/").pop()}</span>
-                  {isStaged && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse shrink-0" />}
-                  {isUnsaved && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />}
+                  <span className="text-[9px] font-bold font-mono shrink-0" style={{ color: iconColor }}>{iconLabel}</span>
+                  <span className="max-w-[100px] truncate">{tab.split("/").pop()}</span>
+                  {isUnsaved && !isStaged && <span className="text-amber-400 text-[10px] leading-none">●</span>}
+                  {isStaged && <span className="text-[#3279F9] text-[10px] leading-none animate-pulse">●</span>}
                   <button
                     onClick={(e) => handleCloseTab(tab, e)}
-                    className="w-3.5 h-3.5 hover:bg-neutral-800 hover:text-rose-400 rounded-full flex items-center justify-center text-[9px] ml-1 transition-colors"
-                  >
-                    ×
-                  </button>
+                    className="w-4 h-4 flex items-center justify-center rounded text-[10px] text-neutral-600 hover:text-neutral-200 hover:bg-neutral-700/60 transition-colors ml-0.5 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
+                    data-active={isActive}
+                  >×</button>
                 </div>
               );
             })}
@@ -3389,30 +3425,51 @@ Automated & Manual Testing
           {/* Bottom Console terminal */}
           {isTerminalOpen && (
             <div className="h-44 bg-[#2d2d30] border-t border-[#2b2b2b] flex flex-col overflow-hidden shrink-0">
-              <div className="px-5 border-b border-[#2b2b2b] bg-[#1e1e1e] flex items-center justify-between text-[9px] font-black text-neutral-400 tracking-wider font-mono select-none">
-                <div className="flex items-center gap-4">
+              {/* Bottom panel tab bar — VS Code style */}
+              <div className="h-9 border-b border-[#252526] bg-[#252526] flex items-end justify-between px-2 shrink-0 select-none">
+                <div className="flex items-end h-full">
+                  {/* Problems tab */}
                   <button
                     onClick={() => setActiveConsoleTab("system")}
-                    className={`py-2 transition-all relative font-bold uppercase tracking-wider ${
+                    className={`h-full px-3.5 flex items-center gap-1.5 text-[11px] font-mono border-r border-[#1e1e1e]/0 transition-colors relative ${
                       activeConsoleTab === "system"
-                        ? "text-[#3279F9] border-b-2 border-[#3279F9]"
-                        : "text-neutral-500 hover:text-neutral-300"
+                        ? "text-[#cccccc] bg-[#1e1e1e]"
+                        : "text-[#808080] hover:text-[#cccccc]"
                     }`}
+                    style={activeConsoleTab === "system" ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
                   >
-                    ⚡ SYSTEM SWARM LOGS
+                    Problems
+                    <span className={`text-[9px] px-1 rounded font-bold ${activeConsoleTab === "system" ? "bg-[#3279F9]/20 text-[#3279F9]" : "bg-neutral-700 text-neutral-400"}`}>
+                      {logs.filter(l => l.type === "error").length || 0}
+                    </span>
                   </button>
+                  {/* Output tab (visual) */}
+                  <button className="h-full px-3.5 flex items-center text-[11px] font-mono text-[#808080] hover:text-[#cccccc] transition-colors">
+                    Output
+                  </button>
+                  {/* Debug Console tab (visual) */}
+                  <button className="h-full px-3.5 flex items-center text-[11px] font-mono text-[#808080] hover:text-[#cccccc] transition-colors">
+                    Debug Console
+                  </button>
+                  {/* Terminal tab */}
                   <button
                     onClick={() => setActiveConsoleTab("powershell")}
-                    className={`py-2 transition-all relative font-bold uppercase tracking-wider ${
+                    className={`h-full px-3.5 flex items-center text-[11px] font-mono transition-colors relative ${
                       activeConsoleTab === "powershell"
-                        ? "text-[#3279F9] border-b-2 border-[#3279F9]"
-                        : "text-neutral-500 hover:text-neutral-300"
+                        ? "text-[#cccccc] bg-[#1e1e1e]"
+                        : "text-[#808080] hover:text-[#cccccc]"
                     }`}
+                    style={activeConsoleTab === "powershell" ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
                   >
-                    🔌 POWERSHELL SESSION
+                    Terminal
+                  </button>
+                  {/* Ports tab (visual) */}
+                  <button className="h-full px-3.5 flex items-center text-[11px] font-mono text-[#808080] hover:text-[#cccccc] transition-colors">
+                    Ports
                   </button>
                 </div>
-                <div className="flex items-center gap-3">
+                {/* Right-side actions */}
+                <div className="flex items-center gap-2 pb-1.5 text-[#808080]">
                   {activeConsoleTab === "powershell" && (
                     <button
                       onClick={() => {
@@ -3421,23 +3478,22 @@ Automated & Manual Testing
                         }
                         setTerminalBuffer("");
                       }}
-                      className="text-neutral-500 hover:text-rose-400 font-mono transition-colors uppercase font-bold text-[8.5px]"
+                      className="text-[10px] hover:text-neutral-300 font-mono transition-colors flex items-center gap-1"
+                      title="Reset PowerShell session"
                     >
-                      🔄 Reset Session
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                     </button>
                   )}
                   <button
-                    onClick={() => {
-                      if (activeConsoleTab === "system") {
-                        setLogs([]);
-                      } else {
-                        setTerminalBuffer("");
-                      }
-                    }}
-                    className="text-neutral-500 hover:text-neutral-300 font-mono transition-colors uppercase font-bold text-[8.5px]"
+                    onClick={() => { activeConsoleTab === "system" ? setLogs([]) : setTerminalBuffer(""); }}
+                    className="text-[10px] hover:text-neutral-300 font-mono transition-colors px-1.5 py-0.5 rounded hover:bg-neutral-700/40"
+                    title="Clear"
                   >
-                    CLEAR
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
+                  <span className="text-[9px] font-mono text-neutral-600 pr-1 select-none">
+                    {activeConsoleTab === "powershell" ? "PowerShell Extension" : "Nexera Swarm"}
+                  </span>
                 </div>
               </div>
               
@@ -3525,17 +3581,61 @@ Automated & Manual Testing
         {isRightSidebarOpen && (
           <section className="w-80 bg-[#252526] border-l border-[#2b2b2b] flex flex-col overflow-hidden shrink-0 select-none">
             
-            {/* Premium Header */}
-            <div className="p-4 border-b border-[#2b2b2b] bg-[#2d2d30] flex items-center justify-between">
-              <span className="text-[10px] font-bold text-transparent bg-clip-text bg-gradient-to-r from-neutral-200 to-[#E3E3E2] uppercase tracking-widest font-mono flex items-center gap-1.5 cursor-pointer">
-                Nexera Autonomous OS Bootstr <span className="text-[7px] text-neutral-500 font-bold">▼</span>
+            {/* Right panel header — VS Code Antigravity style */}
+            <div className="h-9 border-b border-[#252526] bg-[#252526] flex items-center justify-between px-3 shrink-0 select-none">
+              <span className="text-[11px] font-semibold text-[#cccccc] font-mono truncate flex items-center gap-1.5">
+                Nexera Autonomous OS Bootstrap
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className="text-neutral-600 shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
               </span>
-              <div className="flex items-center gap-1.5 text-neutral-500">
-                <button title="Options" className="p-1 rounded hover:bg-neutral-900/60 hover:text-neutral-300 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                  </svg>
+              <div className="flex items-center gap-0.5 text-[#808080]">
+                {/* New conversation */}
+                <button
+                  onClick={() => { setChatMessages([]); }}
+                  title="New conversation"
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 hover:text-neutral-300 transition-colors text-[13px] font-light"
+                >+</button>
+                {/* Reload history */}
+                <button
+                  title="Reload chat history"
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 hover:text-neutral-300 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 </button>
+                {/* Speech Mute/Unmute Toggle */}
+                <button
+                  onClick={() => {
+                    const nextMuted = !isMuted;
+                    setIsMuted(nextMuted);
+                    if (nextMuted) {
+                      window.speechSynthesis?.cancel();
+                    } else {
+                      if (typeof window !== "undefined" && window.speechSynthesis) {
+                        const utterance = new SpeechSynthesisUtterance("Voice synthesis active");
+                        utterance.rate = 1.05;
+                        window.speechSynthesis.speak(utterance);
+                      }
+                    }
+                  }}
+                  title={isMuted ? "Unmute Swarm Speech (AI Text-To-Speech)" : "Mute Swarm Speech (AI Text-To-Speech)"}
+                  className={`w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 transition-colors ${isMuted ? "text-neutral-500" : "text-[#00d8ff] font-bold"}`}
+                >
+                  {isMuted ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l4-4m0 4l-4-4" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                  )}
+                </button>
+                {/* Close right panel */}
+                <button
+                  onClick={() => setIsRightSidebarOpen(false)}
+                  title="Close panel"
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 hover:text-neutral-300 transition-colors text-[13px]"
+                >×</button>
               </div>
             </div>
 
@@ -3585,12 +3685,21 @@ Automated & Manual Testing
                       <div className="flex flex-col gap-3 w-full">
                         {/* Text Content */}
                         {msg.content && (
-                          <div className="flex items-start gap-2 max-w-[90%]">
+                          <div className="flex items-start gap-2 max-w-[90%] group">
                             <div className="w-5 h-5 rounded-full bg-indigo-950/50 border border-indigo-900/40 flex items-center justify-center font-bold text-[8px] text-[#00d8ff] shrink-0 font-mono select-none">
                               N
                             </div>
-                            <div className="text-[10px] font-mono text-[#C9D1D9] leading-relaxed whitespace-pre-line bg-[#2d2d30]/80 border border-[#3c3c3c]/80 rounded-2xl rounded-tl-none px-3.5 py-2 shadow-sm">
+                            <div className="relative text-[10px] font-mono text-[#C9D1D9] leading-relaxed whitespace-pre-line bg-[#2d2d30]/80 border border-[#3c3c3c]/80 rounded-2xl rounded-tl-none px-3.5 py-2 shadow-sm pr-8">
                               {msg.content}
+                              <button
+                                onClick={() => speakResponse(msg.content, true)}
+                                title="Read message aloud"
+                                className="absolute right-2 top-2 text-[#808080] hover:text-[#00d8ff] opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                </svg>
+                              </button>
                             </div>
                           </div>
                         )}
@@ -3810,6 +3919,14 @@ Automated & Manual Testing
                   </button>
                 </div>
 
+                {/* Active model label — matches "Gemini 3.5 Flash (High)" in screenshot */}
+                <div className="flex items-center justify-between px-1 mb-1">
+                  <span className="text-[9px] text-[#808080] font-mono flex items-center gap-1">
+                    {configModelName || "No model selected"}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                  </span>
+                </div>
+
                 {/* Bottom line: Provider Select on Left, Send circular green button on Right */}
                 <div className="flex justify-between items-center px-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -3873,29 +3990,55 @@ Automated & Manual Testing
 
       {/* 6. Status Bar (Bottom Ribbon) */}
       <footer className="h-6 bg-[#252526] border-t border-[#2b2b2b] px-4 flex items-center justify-between text-[10px] font-mono text-neutral-500 shrink-0 select-none">
-        
+
         {/* Left Side Statuses */}
         <div className="flex items-center gap-4">
           <span className="hover:text-indigo-400 cursor-pointer font-bold tracking-wider">Nexera Project</span>
-          <span className="text-[#3279F9] font-bold">🌿 {gitStatus.branch}*</span>
+          <span className="text-[#3279F9] font-bold">🌿 {gitStatus.branch || "master"}*</span>
           <span className="flex items-center gap-1 text-amber-500 font-bold" title="Warnings count">
             <span>⚠</span>
-            <span>13</span>
+            <span>0</span>
           </span>
           <span className="flex items-center gap-1 text-neutral-600 font-bold" title="Errors count">
             <span>✗</span>
             <span>0</span>
           </span>
+          {/* Sandbox mode indicator */}
+          <span
+            title={sandboxMode === "docker" ? "Docker sandbox active — agent commands are containerised" : "Host mode — Docker not detected, running on local OS"}
+            className={`flex items-center gap-1 font-bold cursor-pointer ${sandboxMode === "docker" ? "text-emerald-400" : sandboxMode === "host" ? "text-amber-500" : "text-neutral-600"}`}
+            onClick={fetchSandboxStatus}
+          >
+            <span>{sandboxMode === "docker" ? "🐳" : "⚙"}</span>
+            <span>{sandboxMode === "unknown" ? "SANDBOX..." : sandboxMode === "docker" ? "DOCKER" : "HOST MODE"}</span>
+          </span>
         </div>
 
-        {/* Right Side Statuses matching screenshot perfectly */}
+        {/* Right Side Statuses */}
         <div className="flex items-center gap-4 text-neutral-500 text-[10px]">
-          <span>{activeTab ? `Ln ${activeTab === "testing_report.md" ? "80" : "1"}, Col 1` : "Ln 1, Col 1"}</span>
+          <span>Ln 1, Col 1</span>
           <span>Spaces: 4</span>
           <span>UTF-8</span>
           <span>LF</span>
-          <span className="text-neutral-400">{activeTab ? (activeTab.endsWith(".tsx") ? "{} TypeScript JSX" : activeTab.endsWith(".py") ? "{} Python" : "{} Markdown") : "{} Plaintext"}</span>
-          <span className="text-[#3279F9] font-extrabold tracking-wider hover:text-indigo-400 cursor-pointer">Nexera - Settings</span>
+          <span className="text-neutral-400">
+            {activeTab
+              ? activeTab.endsWith(".tsx") ? "{} TypeScript JSX"
+              : activeTab.endsWith(".ts") ? "{} TypeScript"
+              : activeTab.endsWith(".py") ? "{} Python"
+              : activeTab.endsWith(".json") ? "{} JSON"
+              : activeTab.endsWith(".md") ? "{} Markdown"
+              : activeTab.endsWith(".css") ? "{} CSS"
+              : activeTab.endsWith(".sh") ? "{} Shell"
+              : activeTab.endsWith(".ps1") ? "{} PowerShell"
+              : "{} Plaintext"
+              : "{} Plaintext"}
+          </span>
+          <span
+            onClick={() => handleDockIconClick("settings")}
+            className="text-[#3279F9] font-extrabold tracking-wider hover:text-indigo-400 cursor-pointer"
+          >
+            Nexera - Settings
+          </span>
         </div>
       </footer>
 

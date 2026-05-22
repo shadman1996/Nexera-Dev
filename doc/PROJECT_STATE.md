@@ -1,7 +1,9 @@
 # Nexera OS — Project State Document
-> Last updated: 2026-05-22 | Version: 1.6.0
+> Last updated: 2026-05-22 | Version: **1.8.0**
 >
-> **Purpose**: This document is the single source of truth for any developer (human or AI) picking up this project cold. Read this first. It tells you what exists, where it lives, what works, what is broken, and what needs to be built next.
+> **Purpose**: Single source of truth for any developer (human or AI) resuming this project cold. Read this before touching any code. It tells you what exists, where it lives, what works, what is broken, and what to build next.
+>
+> **Rule**: This file is updated every session, every time a new feature, fix, or system is added.
 
 ---
 
@@ -11,12 +13,13 @@
 3. [How to Run Everything](#3-how-to-run-everything)
 4. [What Is Built and Working](#4-what-is-built-and-working)
 5. [What Is Partially Built](#5-what-is-partially-built)
-6. [What Is Missing](#6-what-is-missing)
+6. [What Is Missing / Next Steps](#6-what-is-missing--next-steps)
 7. [Key Files Reference](#7-key-files-reference)
-8. [Architecture in One Diagram](#8-architecture-in-one-diagram)
-9. [Known Bugs and Workarounds](#9-known-bugs-and-workarounds)
+8. [Architecture Diagram](#8-architecture-diagram)
+9. [Known Bugs — Fixed & Active](#9-known-bugs--fixed--active)
 10. [Design System](#10-design-system)
-11. [Roadmap](#11-roadmap)
+11. [API Reference](#11-api-reference)
+12. [Roadmap](#12-roadmap)
 
 ---
 
@@ -24,14 +27,16 @@
 
 Nexera OS is a **local-first, agent-driven developer IDE** that runs entirely on your machine. It combines:
 
-- A **FastAPI backend** that hosts a LangGraph multi-agent swarm (CEO → Engineer → QA)
-- A **Next.js 16 PWA frontend** that is the actual IDE UI (5-pane VS Code–style layout)
-- A **PowerShell terminal** streamed live over WebSocket
+- A **FastAPI backend** hosting a LangGraph multi-agent swarm (CEO → Engineer → QA)
+- A **Next.js 16 PWA frontend** — the full IDE UI in a single 4100-line `page.tsx`
+- A **Monaco Editor** (VS Code's editor) for the center code pane with syntax highlighting
+- A **live PowerShell terminal** streamed over WebSocket
 - A **CTO approval gate** — no agent writes a file without human sign-off
+- A **Docker sandbox** for safe agent command execution (falls back to host mode gracefully)
 - **Playwright browser automation** for web crawling tasks
 - **PWA support** — installable on Android/iOS, offline fallback, Cloudflare tunnel for remote access
 
-The user interacts with the IDE, types a task, and a swarm of AI agents (using Ollama locally or Gemini/Claude via API) autonomously plan, code, test, and commit — pausing for your approval at every file write.
+The user types a task into the IDE. A swarm of AI agents (Ollama locally, or Gemini/Claude via API) autonomously plans, codes, tests, and commits — pausing at every file write for your approval.
 
 ---
 
@@ -39,53 +44,55 @@ The user interacts with the IDE, types a task, and a swarm of AI agents (using O
 
 ```
 D:\Nexera\
-├── backend/                    ← FastAPI Python server
-│   ├── main.py                 ← API routes, WebSocket hubs, task runner (856 lines)
-│   ├── graph.py                ← LangGraph CEO/Engineer/QA agents (399 lines)
-│   ├── config.py               ← Load/save nexera.config.json (109 lines)
-│   ├── database.py             ← SQLAlchemy models: agent_logs, git_changelogs, build_state
-│   ├── pattern_engine.py       ← Typo correction, shorthand expansion, analytics (150 lines)
-│   ├── redis_state.py          ← Redis with in-memory fallback (29 lines)
-│   ├── websocket_manager.py    ← Broadcast manager for /ws (26 lines)
+├── backend/
+│   ├── main.py                  ← All API routes + WebSocket hubs. Pydantic-validated. (~900 lines)
+│   ├── graph.py                 ← LangGraph CEO/Engineer/QA agents + run_task() (~400 lines)
+│   ├── config.py                ← Load/save nexera.config.json (109 lines)
+│   ├── database.py              ← SQLAlchemy 2.0 async models (agent_logs, git_changelogs, build_state)
+│   ├── pattern_engine.py        ← Typo correction, shorthand expansion, analytics (150 lines)
+│   ├── redis_state.py           ← Redis with in-memory fallback (29 lines)
+│   ├── websocket_manager.py     ← Broadcast manager for /ws (26 lines)
 │   └── tools/
-│       ├── file_ops.py         ← read/write/delete/list files in workspace
-│       ├── shell_ops.py        ← run_command() wrapper
-│       ├── git_ops.py          ← git init/add/commit/log
-│       ├── automation_ops.py   ← pyautogui mouse/keyboard + real Playwright crawl
-│       └── screenshot_tool.py  ← desktop capture + pytesseract OCR
+│       ├── sandbox_manager.py   ← DockerSandbox: container lifecycle, wrap_command(), fallback
+│       ├── file_ops.py          ← read/write/delete/list files in workspace/
+│       ├── shell_ops.py         ← run_command() wrapper
+│       ├── git_ops.py           ← git init/add/commit/log
+│       ├── automation_ops.py    ← pyautogui mouse/keyboard + real async Playwright crawl
+│       └── screenshot_tool.py   ← desktop capture + pytesseract OCR
 │
-├── mobile/                     ← Next.js 16 PWA (the IDE UI)
+├── mobile/                      ← Next.js 16 PWA (the IDE UI)
 │   ├── src/app/
-│   │   ├── page.tsx            ← MAIN IDE UI — 4100+ lines, all panes and logic
-│   │   ├── layout.tsx          ← Root layout with PWA metadata
-│   │   ├── sw-register.tsx     ← Service worker registration component
-│   │   └── offline/page.tsx    ← Offline fallback page
+│   │   ├── page.tsx             ← MAIN IDE — Monaco editor, 5-pane layout, all logic (~4150 lines)
+│   │   ├── layout.tsx           ← Root layout with full PWA metadata
+│   │   ├── sw-register.tsx      ← Service worker registration on mount
+│   │   └── offline/page.tsx     ← Offline fallback page
 │   └── public/
-│       ├── manifest.json       ← PWA manifest (icons, shortcuts, theme)
-│       ├── sw.js               ← Service worker (cache-first static, network-first nav)
-│       ├── icon-192x192.png    ← PWA icon — cobalt blue #3279F9 with white N
+│       ├── manifest.json        ← PWA manifest (icons, shortcuts, theme #3279F9)
+│       ├── sw.js                ← Service worker (cache-first static, network-first nav)
+│       ├── icon-192x192.png     ← Cobalt blue #3279F9 background, white N lettermark
 │       ├── icon-512x512.png
 │       └── icon-maskable-512x512.png
 │
-├── desktop/                    ← STUB ONLY — index.html skeleton, not a real wrapper
+├── desktop/                     ← STUB ONLY — index.html reference design, NOT a Tauri app
 │
-├── workspace/                  ← Agent sandbox — all agent file writes land here
-│   └── test_backend.py         ← 7 unit tests (config, pattern engine, async SQLite)
+├── workspace/                   ← Agent sandbox directory — all agent file writes land here
+│   └── test_backend.py          ← 7 unit tests (config, pattern engine, async SQLite)
 │
-├── doc/                        ← Documentation
-│   ├── PROJECT_STATE.md        ← THIS FILE — read first
-│   ├── architecture.md         ← Deep-dive API schemas, DB design, swarm workflows
-│   ├── srs.md                  ← Software Requirements Specification (4 phases)
-│   ├── agent_ide_blueprint.md  ← Full architecture spec with gap analysis
-│   ├── user_guide.md           ← End-user instructions
-│   └── CLAUDE.md / AGENTS.md  ← AI developer instructions
+├── doc/
+│   ├── PROJECT_STATE.md         ← THIS FILE — updated every session
+│   ├── CHANGELOG.md             ← Version history (v1.0.0–v1.7.0)
+│   ├── architecture.md          ← Deep-dive API schemas, DB design, swarm workflows
+│   ├── agent_ide_blueprint.md   ← Full architecture spec + Mermaid gap analysis diagrams
+│   ├── srs.md                   ← Software Requirements Specification (4 phases)
+│   ├── user_guide.md            ← End-user instructions
+│   └── CLAUDE.md / AGENTS.md   ← AI developer instructions
 │
-├── bootstrap.py                ← LangGraph autonomous 4-phase build engine (1450 lines)
-├── cloudflare_tunnel.py        ← Launch Cloudflare tunnel to expose port 3000
-├── nexera.config.json          ← Runtime config: model, provider, API keys, history
-├── requirements.txt            ← Python runtime deps
-├── requirements-dev.txt        ← Python test/dev deps (pytest, aiosqlite, sqlalchemy)
-├── CHANGELOG.md                ← Version history — update at end of every session
+├── bootstrap.py                 ← Autonomous 4-phase LangGraph build engine (1450 lines)
+├── cloudflare_tunnel.py         ← Launch Cloudflare tunnel to expose port 3000
+├── nexera.config.json           ← Runtime config: model, provider, keys, version history
+├── requirements.txt             ← Python runtime deps
+├── requirements-dev.txt         ← pytest, pytest-asyncio, aiosqlite, sqlalchemy
+├── self_test.py                 ← Standalone diagnostic suite (100% health score)
 └── .gitignore
 ```
 
@@ -93,23 +100,23 @@ D:\Nexera\
 
 ## 3. How to Run Everything
 
-### Start the Backend
+### Backend
 ```powershell
 cd D:\Nexera
 pip install -r requirements.txt     # first time only
 uvicorn backend.main:app --reload --port 8000
 ```
-Backend is live at `http://127.0.0.1:8000`. Swagger docs at `/docs`.
+Live at `http://127.0.0.1:8000`. Swagger UI at `/docs`.
 
-### Start the Frontend
+### Frontend
 ```powershell
 cd D:\Nexera\mobile
 npm install                          # first time only
 npm run dev
 ```
-IDE is live at `http://localhost:3000`.
+IDE at `http://localhost:3000`.
 
-### Run Backend Tests
+### Run Tests
 ```powershell
 cd D:\Nexera
 pip install -r requirements-dev.txt
@@ -117,12 +124,10 @@ pytest workspace/test_backend.py -v
 # Expected: 7 passed, 0 warnings
 ```
 
-### Open Remote on Mobile (Cloudflare Tunnel)
+### Expose to Mobile via Cloudflare
 ```powershell
-# Option A: PowerShell script
 .\mobile\launch_tunnel.ps1
-
-# Option B: Python script (auto-detects cloudflared, prints the public URL)
+# or
 python cloudflare_tunnel.py --port 3000
 ```
 
@@ -130,69 +135,78 @@ python cloudflare_tunnel.py --port 3000
 
 ## 4. What Is Built and Working
 
-### ✅ Backend — FastAPI Server (`backend/main.py`)
-- `GET /api/health` — health check
-- `GET /api/config` / `POST /api/config/save` — load and persist `nexera.config.json`
-- `POST /api/start` — kick off a swarm task (CEO → Engineer → QA)
-- `GET /api/approvals/pending` — poll for a pending CTO approval item
-- `POST /api/approvals/submit` — submit approve/reject with revision notes
-- `GET /api/workspace/files` — list workspace file tree
-- `POST /api/workspace/create` — create file or directory
-- `DELETE /api/workspace/delete` — delete file or directory
-- `GET /api/workspace/read` — read file contents
-- `POST /api/workspace/write` — write file contents
-- `GET /api/git/status` — git status of workspace
-- `POST /api/git/commit` — stage all + commit with message
-- `POST /api/automation/run` — run Playwright crawl on a URL
-- `POST /api/intent/preview` — preview pattern-engine expansion of a prompt
-- `WS /ws` — main swarm event stream (agent logs, system messages)
-- `WS /ws/terminal` — live PowerShell subprocess I/O (proxied through secure Docker sandbox when available)
-- **Docker Sandbox Manager (`backend/tools/sandbox_manager.py`)**: Safe isolation gateway wrapping all terminal operations, REST test runs, and QA agent subprocess unittests inside a dedicated container (`nexera-sandbox`), with resilient automatic fallback to local host execution if Docker is absent.
+### ✅ Backend — FastAPI (`backend/main.py`)
+
+All POST endpoints use **Pydantic typed models** — invalid payloads return structured 422 errors automatically.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/status` | GET | Health + active model + `sandbox: bool` |
+| `/api/sandbox/status` | GET | `{ active, mode: "docker"\|"host", container }` |
+| `/api/config` | GET | Load `nexera.config.json` |
+| `/api/config/save` | POST | Save config |
+| `/api/start` | POST | Kick off swarm task (`TaskRequest`) |
+| `/api/approvals/pending` | GET | Poll for pending CTO approval item |
+| `/api/approvals/submit` | POST | Approve/reject (`ApprovalRequest`) |
+| `/api/workspace/tree` | GET | Workspace file tree |
+| `/api/workspace/read` | GET | Read file by `?path=` |
+| `/api/workspace/save` | POST | Save file (`FileSaveRequest`) |
+| `/api/workspace/create` | POST | Create file/dir (`FileCreateRequest`) |
+| `/api/workspace/delete` | POST | Delete file/dir (`FileDeleteRequest`) |
+| `/api/workspace/search` | GET | Full-text search workspace |
+| `/api/git/status` | GET | Git status of workspace |
+| `/api/git/commit` | POST | Stage all + commit |
+| `/api/automation/run` | POST | Playwright crawl (`AutomationRunRequest`) |
+| `/api/intent/preview` | POST | Pattern-engine prompt expansion preview |
+| `/api/screenshot` | GET | Desktop screenshot via pyautogui + OCR |
+| `WS /ws` | WebSocket | Swarm event stream (agent logs, system events) |
+| `WS /ws/terminal` | WebSocket | Live PowerShell subprocess I/O |
 
 ### ✅ Agent Swarm (`backend/graph.py`)
-- **CEO Agent** — decomposes the user's goal into numbered steps using the configured LLM
-- **Engineer Agent** — generates code per step, stages it in `approval_queue`, waits for CTO sign-off, then writes to `workspace/`
-- **QA Agent** — runs `compile()` syntax check + `subprocess` unittest discovery on written files
-- **Self-healing retry loop** — up to 3 retries per step before escalating
-- **CTO approval gate** — `approval_queue` dict acts as a blocking semaphore; `/api/approvals/submit` clears it immediately (fixes the "banner doesn't go away" bug)
+- **CEO Agent** — decomposes goal into numbered steps via LLM
+- **Engineer Agent** — generates code, stages in `approval_queue`, waits for CTO sign-off, writes to `workspace/`
+- **QA Agent** — `compile()` syntax check + `unittest discover` (runs inside Docker if available, falls back to host)
+- **Self-healing retry loop** — 3 retries per step, then escalates to CTO
+- **CTO approval gate** — `approval_queue` dict acts as a blocking semaphore between Engineer and frontend
 
-### ✅ LangGraph Autonomous Builder (`bootstrap.py`)
-- Full 4-phase state machine: Phase 1 (Backend) → Phase 2 (Desktop) → Phase 3 (Mobile) → Phase 4 (Automation)
-- Nodes: `phase_planner`, `agent_node`, `execute_tools_node`, `cto_checkpoint_node`, `finish_node`
-- Tools available to agents: `create_file`, `read_file`, `run_shell_command`, `list_directory`, `phase_complete`
-- Message pruning (`MSG_LIMIT=14`) to prevent token bloat
-- File truncation at `TRUNCATE_LEN=3000` chars
-- `MAX_RETRIES=3` cap on all retry loops
-- Safety: `is_safe_command()` blocks `rm -rf /`, `format c:`, writes to system dirs
-- Safety: `is_safe_path()` constrains all file ops inside project root
+### ✅ Docker Sandbox (`backend/tools/sandbox_manager.py`)
+- `DockerSandbox` class — checks Docker daemon on startup (5s timeout, non-blocking)
+- `wrap_command(cmd)` — wraps list or string commands to run inside `nexera-sandbox` container
+- `get_terminal_spawner()` — returns `docker exec -it nexera-sandbox bash` or PowerShell fallback
+- `ensure_container_running()` — creates/starts container if not already running
+- **Wired into**: QA agent unit test runner (`graph.py`), `/ws/terminal` spawn
+- **Fallback**: all operations work in host mode if Docker is absent — no crashes
 
 ### ✅ IDE Frontend (`mobile/src/app/page.tsx`)
+
 Five-pane VS Code Dark+ layout:
 
-| Pane | What It Does |
-|------|-------------|
-| **Activity Bar** (left, 56px) | 9 icon buttons: Explorer, Search, Git, Run, Extensions, Brain, Viewport, Settings, Agents |
-| **Left Sidebar** (288px) | Switches content based on active icon: file tree, git status, extensions, personalization, agent provider cards |
-| **Center Editor** | Multi-tab file editor, Welcome dashboard, inline CTO approval diff bar |
-| **Right Swarm Chat** | Color-coded agent log stream, expandable reasoning cards, chat input |
-| **Bottom Panel** | Dual-tab: System Swarm Logs + live PowerShell terminal |
+| Pane | Status | Details |
+|------|--------|---------|
+| **Activity Bar** (56px left) | ✅ Full | 9 icons: Explorer, Search, Git, Run, Extensions, Brain, Viewport, Settings, Agents |
+| **Left Sidebar** (288px) | ✅ Full | Switches per icon: file tree, git panel, extensions, brain/personalization, agent cards, settings |
+| **Center Editor** | ✅ Full | **Monaco Editor** (`@monaco-editor/react`) with syntax highlighting, Ctrl+S save, auto-brackets, smooth cursor. **Flat VS Code tabs** — colored language badge, top cobalt accent on active, hover-to-reveal `×` close. |
+| **Right Swarm Chat** | ✅ Full | Color-coded agent log stream, expandable accordion cards, chat input |
+| **Bottom Panel** | ✅ Full | Dual tab: System Swarm Logs + live PowerShell terminal |
+| **Status Bar** (bottom) | ✅ Full | Git branch, ⚠/✗ counts, 🐳 sandbox indicator, file type, Ln/Col, settings link |
 
 Key features:
-- **Monaco Editor Integration** (v1.6.0): Fully integrated high-fidelity React Monaco Editor featuring automatic language detection, autocomplete, smooth blinking cursor carets, matching bracket highlights, and a global key intercept `Ctrl+S` auto-saver.
-- **Agents Panel** (v1.6.0): Three provider cards — Local (Ollama), Gemini, Claude. Click to activate, fill in model/key, Save & Apply.
-- **CTO Approval Banner**: Shows inline in editor tab when agent proposes a file write. Accept/Reject buttons. Fixed: banner disappears immediately on click (no more race condition).
-- **File Explorer**: Tree view with inline create/delete buttons, real-time refresh after agent writes
-- **Git Panel**: Shows staged/unstaged files, commit message input, one-click commit
-- **PowerShell Terminal**: Full interactive shell via WebSocket. Arrow-up/down history, Ctrl+C interrupt.
-- **Pattern Engine Preview**: Live expansion preview as you type (spell correction + shorthands)
-- **Viewport Panel**: pyautogui coordinate click + Playwright browser crawl controls
+- **Monaco Editor**: `vs-dark` theme, language auto-detected from file extension (`getLanguageFromPath`), `Ctrl+S` command wired to `handleSaveFile`, auto-closing brackets, smooth caret animation, minimap off
+- **Agents Panel**: Three provider cards (Local/Ollama, Gemini, Claude). Click card to activate, edit model/key fields, SAVE & APPLY
+- **CTO Approval Banner**: Inline in editor when agent stages a file. Accept/Reject buttons. Fixed race condition — banner clears immediately on click
+- **File Explorer**: Recursive tree with inline create/delete, auto-refresh after agent writes
+- **Git Panel**: Staged/unstaged file list, commit message input, one-click commit
+- **PowerShell Terminal**: Full interactive shell via WebSocket. Arrow-up/down history, Ctrl+C interrupt
+- **Pattern Engine Preview**: Live expansion as you type in the brain/personalization panel
+- **Viewport Panel**: pyautogui coordinate click + Playwright crawler controls
+- **Sandbox Status Chip**: Status bar shows 🐳 DOCKER (green) or ⚙ HOST MODE (amber); click to recheck
 
-### ✅ PWA / Mobile (`mobile/public/`)
-- `manifest.json` — full PWA manifest, installable on Android/Chrome
-- `sw.js` — service worker: cache-first for `_next/static/`, network-first for navigation, skips API/WebSocket
-- `offline/page.tsx` — offline fallback page with "Retry Connection" button
-- Icons: 192×192, 512×512, 512×512 maskable (cobalt blue #3279F9, white N lettermark)
-- Cloudflare tunnel: `cloudflare_tunnel.py` or `launch_tunnel.ps1` expose port 3000 publicly
+### ✅ PWA / Mobile
+- `manifest.json` — installable on Android/Chrome
+- `sw.js` — cache-first for `_next/static/`, network-first navigation, API/WS bypassed
+- `offline/page.tsx` — graceful offline fallback
+- Icons: 192×192, 512×512, 512×512 maskable
+- Tunnel: `cloudflare_tunnel.py` or `launch_tunnel.ps1`
 
 ### ✅ Database (`backend/database.py`)
 SQLite via SQLAlchemy 2.0 async:
@@ -201,8 +215,8 @@ SQLite via SQLAlchemy 2.0 async:
 - `build_state` — phase (PK), status, files_json
 
 ### ✅ Pattern Engine (`backend/pattern_engine.py`)
-- Typo auto-correction (common dev typos)
-- Shorthand expansion (user-defined aliases)
+- Auto-corrects common dev typos
+- Expands user-defined shorthands
 - Analytics: total_prompts, typo_corrections_made, shorthands_applied, characters_processed
 - Config stored in `nexera.config.json` under `personalization.aliases`
 
@@ -210,167 +224,203 @@ SQLite via SQLAlchemy 2.0 async:
 
 ## 5. What Is Partially Built
 
-### ⚠️ Desktop Wrapper (`desktop/`)
-`desktop/index.html` is a **79KB standalone HTML file** — it's a working reference design for the VS Code Dark+ theme, NOT an Electron or Tauri app. Phase 2 of the SRS (desktop IDE) was never implemented as a real native wrapper.
+### ⚠️ Docker Sandbox — wired but not all command paths use it
+`sandbox_manager.py` exists and `DockerSandbox` is instantiated in `main.py`. The QA agent routes through it. **But `bootstrap.py`'s `run_shell_command` tool does not yet call `sandbox.wrap_command()`** — it still runs commands directly with the `is_safe_command()` blocklist as the only guard.
 
-**What's needed**: Tauri v2 app that wraps `localhost:3000` with a system tray icon and native window controls.
+**Fix needed**: In `bootstrap.py` lines ~360–400, route `subprocess.run()` calls through `sandbox.wrap_command()`.
 
-### ⚠️ Context Window Management
-Currently uses a fixed message count (`MSG_LIMIT=14`). The agent does not count actual tokens.
+### ⚠️ Context Window — fixed message count, not token count
+`bootstrap.py` uses `MSG_LIMIT=14` (message count). It does not measure actual token usage.
 
-**What's needed**: `tiktoken` token counting + RAG retrieval (ChromaDB + nomic-embed-text via Ollama) to inject only the relevant file chunks rather than full files.
+**Fix needed**: Integrate `tiktoken`, count tokens per message, prune when budget exceeds `MAX_CONTEXT=8192`.
+
+### ⚠️ Desktop Wrapper
+`desktop/index.html` is a 79KB standalone HTML reference design. Phase 2 of the SRS (Tauri v2 desktop wrapper) was never built.
+
+**Fix needed**: Build a Tauri v2 app in `desktop/` that wraps `localhost:3000`.
+
+### ⚠️ No API Authentication
+All endpoints accept requests from any origin. CORS allows `*`. No API key, no session token.
+
+**Fix needed**: Add `X-Nexera-Key` header middleware that validates a key from `nexera.config.json`.
 
 ---
 
-## 6. What Is Missing
+## 6. What Is Missing / Next Steps
 
-| Feature | Priority | Notes |
-|---------|----------|-------|
-| Docker sandbox for agent execution | Critical | ✅ Fully implemented in v1.6.0 |
-| Monaco Editor integration | High | ✅ Fully implemented in v1.6.0 |
-| API authentication | High | All endpoints are open; no API key or session auth |
-| Pydantic request validation | High | All FastAPI endpoints use raw `request.json()` |
-| Token cost tracking | Medium | No tiktoken, no per-call cost calculation |
-| LSP / IntelliSense | Medium | No language server, no autocomplete |
-| Split editor panes | Medium | Only single editor pane |
-| Status bar | Low | No git branch / token cost / encoding indicator |
-| Dependency graph visualizer | Low | Not implemented |
-| Collaborative editing (CRDT/OT) | Future | Multi-user not in scope yet |
-| Debugging integration (DAP) | Future | No debugger protocol |
+| Feature | Priority | Status |
+|---------|----------|--------|
+| Wire `bootstrap.py` shell commands through DockerSandbox | Critical | ⚠️ Partial |
+| API key authentication middleware | High | ❌ Missing |
+| `tiktoken` token counting + cost tracking | Medium | ❌ Missing |
+| RAG retrieval (ChromaDB + nomic-embed-text) | Medium | ❌ Missing |
+| Tauri v2 desktop wrapper | Medium | ❌ Missing (stub only) |
+| Inline diff view for CTO approvals (Monaco DiffEditor) | Medium | ❌ Missing |
+| LSP autocomplete (language server) | Low | ❌ Missing |
+| Collaborative editing (OT/CRDT) | Future | ❌ Not scoped |
+| Debugger protocol (DAP) | Future | ❌ Not scoped |
 
 ---
 
 ## 7. Key Files Reference
 
-| File | Role | Size |
-|------|------|------|
-| `mobile/src/app/page.tsx` | Entire IDE UI — all state, all panes, all event handlers | ~4100 lines |
-| `backend/main.py` | All API routes + WebSocket hubs | ~856 lines |
-| `bootstrap.py` | Autonomous 4-phase LangGraph build runner | ~1450 lines |
-| `backend/graph.py` | CEO/Engineer/QA agent classes + run_task() | ~399 lines |
-| `backend/pattern_engine.py` | Prompt preprocessing, typos, shorthands, analytics | ~150 lines |
-| `nexera.config.json` | Runtime config: model, provider, API keys, version history | ~3.3KB |
-| `CHANGELOG.md` | Version history — the primary cross-session memory for AI assistants | — |
-| `doc/agent_ide_blueprint.md` | Full architecture spec + gap analysis (Mermaid diagrams) | — |
+| File | Role | Approx Size |
+|------|------|------------|
+| `mobile/src/app/page.tsx` | Entire IDE UI | ~4150 lines |
+| `backend/main.py` | All API + WebSocket routes, Pydantic models | ~900 lines |
+| `bootstrap.py` | Autonomous 4-phase LangGraph build engine | ~1450 lines |
+| `backend/graph.py` | CEO/Engineer/QA agents + run_task() | ~400 lines |
+| `backend/tools/sandbox_manager.py` | Docker lifecycle, command wrapping, fallback | ~130 lines |
+| `backend/pattern_engine.py` | Prompt preprocessing, typos, shorthands | ~150 lines |
+| `nexera.config.json` | Runtime config — model, provider, API keys | ~3.3KB |
+| `doc/CHANGELOG.md` | Version history v1.0.0→v1.7.0 | — |
 
 ---
 
-## 8. Architecture in One Diagram
+## 8. Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  CLIENT LAYER                                                   │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Next.js 16 PWA — localhost:3000                        │   │
-│  │  page.tsx: 5-pane IDE (Activity | Sidebar | Editor |   │   │
-│  │  Swarm Chat | Terminal)                                 │   │
-│  └───────────────────────┬─────────────────────────────────┘   │
-│                          │ HTTP + WebSocket                     │
-└──────────────────────────┼─────────────────────────────────────┘
-                           │
-┌──────────────────────────▼─────────────────────────────────────┐
-│  API GATEWAY — FastAPI :8000                                    │
-│                                                                 │
-│  REST: /api/start  /api/approvals/*  /api/workspace/*          │
-│        /api/git/*  /api/automation/run  /api/config/*          │
-│  WS:   /ws (swarm events)   /ws/terminal (PowerShell I/O)     │
-└──────────────────────────┬─────────────────────────────────────┘
-                           │
-┌──────────────────────────▼─────────────────────────────────────┐
-│  ORCHESTRATION LAYER — graph.py                                 │
-│                                                                 │
-│  run_task(goal)                                                 │
-│    └→ CEO.execute()     ← decomposes goal into steps           │
-│         └→ Engineer.execute()  ← generates code per step      │
-│              └→ approval_queue ← BLOCKS until CTO approves     │
-│                   └→ QA.execute()  ← compile() + unittest      │
-│                        └→ retry loop (max 3)                   │
-└──────────────────────────┬─────────────────────────────────────┘
-                           │
-┌──────────────────────────▼─────────────────────────────────────┐
-│  EXECUTION LAYER — tools/                                       │
-│                                                                 │
-│  file_ops.py    ← read/write files in workspace/               │
-│  shell_ops.py   ← run PowerShell/bash commands                 │
-│  git_ops.py     ← git init/add/commit/log                      │
-│  automation_ops.py  ← pyautogui + Playwright                   │
-│  screenshot_tool.py ← desktop capture + OCR                    │
-└──────────────────────────┬─────────────────────────────────────┘
-                           │
-┌──────────────────────────▼─────────────────────────────────────┐
-│  INTELLIGENCE LAYER                                             │
-│                                                                 │
-│  Ollama (local)   → qwen2.5-coder:7b or any local model       │
-│  Gemini API       → gemini-2.0-flash / 1.5-pro / 2.0-pro-exp  │
-│  Claude API       → claude-opus-4-7 / sonnet-4-6 / haiku-4-5  │
-│  pattern_engine   → typo correction + shorthand expansion      │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  CLIENT LAYER                                                       │
+│  Next.js 16 PWA — localhost:3000                                    │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  page.tsx — 5-pane IDE                                       │  │
+│  │  Activity Bar | Sidebar | Monaco Editor | Chat | Terminal    │  │
+│  │  Status bar: git branch · sandbox mode · file type · Ln/Col │  │
+│  └─────────────────────────┬────────────────────────────────────┘  │
+│                             │ HTTP REST + WebSocket                  │
+└─────────────────────────────┼───────────────────────────────────────┘
+                              │
+┌─────────────────────────────▼───────────────────────────────────────┐
+│  API GATEWAY — FastAPI :8000                                        │
+│  All POST bodies validated via Pydantic models                      │
+│  REST: /api/start  /api/approvals/*  /api/workspace/*              │
+│        /api/git/*  /api/sandbox/status  /api/config/*              │
+│  WS:   /ws (swarm events)   /ws/terminal (PowerShell)             │
+└─────────────────────────────┬───────────────────────────────────────┘
+                              │
+┌─────────────────────────────▼───────────────────────────────────────┐
+│  ORCHESTRATION — graph.py                                           │
+│  run_task(goal)                                                     │
+│    CEO.execute()     → decomposes into steps                       │
+│    Engineer.execute() → generates code → approval_queue (BLOCKS)   │
+│    QA.execute()      → compile() + unittest via DockerSandbox      │
+│    retry loop (max 3)                                               │
+└─────────────────────────────┬───────────────────────────────────────┘
+                              │
+┌─────────────────────────────▼───────────────────────────────────────┐
+│  EXECUTION LAYER                                                    │
+│  DockerSandbox (sandbox_manager.py)                                 │
+│    ├─ Docker active  → wrap_command() → nexera-sandbox container   │
+│    └─ Docker absent  → direct host subprocess (safe path only)     │
+│  file_ops / shell_ops / git_ops / automation_ops / screenshot_tool  │
+└─────────────────────────────┬───────────────────────────────────────┘
+                              │
+┌─────────────────────────────▼───────────────────────────────────────┐
+│  INTELLIGENCE LAYER                                                 │
+│  Ollama (local)   → any model at http://127.0.0.1:11434            │
+│  Gemini API       → gemini-2.0-flash / 1.5-pro / 2.0-pro-exp      │
+│  Claude API       → claude-opus-4-7 / sonnet-4-6 / haiku-4-5      │
+│  pattern_engine   → typo correction + shorthand expansion          │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 9. Known Bugs and Workarounds
+## 9. Known Bugs — Fixed & Active
 
-### Fixed in v1.6.0
-- **CTO approval banner doesn't go away after clicking Approve/Reject**
-  - Root cause: `/api/approvals/submit` set `status` but left `pending` set. The frontend's 1500ms polling loop re-fetched and saw `has_pending: true`, re-rendering the banner.
-  - Fix: `backend/main.py` line ~360 — `approval_queue["pending"] = None` is now cleared immediately inside the submit endpoint, before the agent polling loop wakes up.
-- **No Docker sandbox**
-  - Fix: Designed and integrated `DockerSandbox` to securely run all command executions, unittests, and terminal sessions inside isolated container, with automatic local host fallback.
-- **Center editor has no syntax highlighting**
-  - Fix: Integrated high-fidelity Monaco Editor (`@monaco-editor/react`) with custom syntax highlighting, automatic language selection, and hotkey auto-saving.
+### Fixed
+| Bug | Version Fixed | Root Cause | Fix Applied |
+|-----|---------------|------------|-------------|
+| Local-variable NameError in `/api/approvals/submit` | v1.7.0 | `status` and `notes` referenced before local definition in websocket broadcast scope | Defined `status` and `notes` locally in endpoint handler scope |
+| CTO approval banner reappears after clicking Approve | v1.6.0 | `/api/approvals/submit` left `pending` set; frontend 1500ms poll re-fetched it | `approval_queue["pending"] = None` cleared immediately in submit endpoint |
+| SQLAlchemy deprecation warning in tests | v1.5.0 | `from sqlalchemy.ext.declarative import declarative_base` deprecated | Changed to `from sqlalchemy.orm import declarative_base` |
+| Tunnel scripts used wrong port (3001 vs 3000) | v1.5.0 | Copy-paste error in launch scripts | Fixed to port 3000 in both `.ps1` and `.sh` |
 
-### Active Issues
-- **No auth on API**: All `/api/` routes are open. Anyone on the same network can call them. Mitigation: only run on `127.0.0.1` (default). Do not expose port 8000 publicly.
-- **`desktop/`** is not a real app: `desktop/index.html` is a standalone HTML demo, not an Electron/Tauri wrapper.
+### Active / Known Limitations
+| Issue | Severity | Notes |
+|-------|----------|-------|
+| `bootstrap.py` shell commands bypass DockerSandbox | High | `run_shell_command` in bootstrap still uses direct subprocess |
+| No API authentication — all endpoints open | High | CORS `*`, no API key middleware |
+| Warnings count in status bar was hardcoded 13 | Fixed v1.7.0 | Now shows 0 |
+| `desktop/` is not a real app | Medium | HTML stub only |
 
 ---
 
 ## 10. Design System
 
-The IDE uses the **VS Code Dark+ / Antigravity** color palette as of v1.6.0:
+VS Code Dark+ / Antigravity IDE palette (applied since v1.6.0):
 
 | Token | Hex | Used For |
 |-------|-----|----------|
-| `--vsc-bg` | `#1e1e1e` | Main editor background |
-| `--vsc-sidebar` | `#252526` | Left sidebar background |
-| `--vsc-sidebar2` | `#2d2d30` | Tab bars, panel headers, terminal header |
-| `--vsc-titlebar` | `#3c3c3c` | Top titlebar / header |
-| `--vsc-activity` | `#333333` | Activity bar (left icon dock) |
-| `--vsc-statusbar` | `#007acc` | Status bar accent (not yet built) |
-| `--accent-cobalt` | `#3279F9` | Active indicators, glows, buttons |
-| `--border` | `#3c3c3c` | Primary borders |
-| `--border-subtle` | `#2b2b2b` | Subtle dividers |
-| `--text-primary` | `#d4d4d4` | Main text |
-| `--text-muted` | `#808080` | Secondary/dim text |
-| `--text-active` | `#cccccc` | Panel header labels |
+| Main editor bg | `#1e1e1e` | Center editor pane |
+| Sidebar bg | `#252526` | Left sidebar, status bar |
+| Tab bar / panels | `#2d2d30` | Tab headers, terminal header, panel headers |
+| Titlebar | `#3c3c3c` | Top header bar |
+| Activity bar | `#333333` | Left icon dock |
+| Primary border | `#3c3c3c` | All major dividers |
+| Subtle border | `#2b2b2b` | Secondary dividers |
+| Accent cobalt | `#3279F9` | Active indicators, glow, buttons |
+| Text primary | `#d4d4d4` | Main readable text |
+| Text muted | `#808080` | Secondary / dim text |
+| Text active label | `#cccccc` | Panel header labels |
+| Status bar accent | `#007acc` | (Reserved — VS Code blue) |
 
-Font: `font-mono` (system monospace stack — Consolas, Courier New).
-
-Tailwind custom scrollbar class `.custom-scrollbar` is defined in `globals.css`.
+Font: system monospace stack — Consolas, Monaco, Courier New. Tailwind class `font-mono`.
+Custom scrollbar: `.custom-scrollbar` defined in `globals.css`.
 
 ---
 
-## 11. Roadmap
+## 11. API Reference
 
-### v1.7.0 — Security Foundation
-- [ ] Add `X-API-Key` header auth to all `/api/` routes
-- [ ] Add Pydantic models for all FastAPI request bodies
-- [x] Wrap agent execution in Docker (`--memory=512m --cpus=1 --network=none`) (Completed in v1.6.0)
+### Pydantic Request Models (backend/main.py)
 
-### v1.8.0 — Real Editor
-- [x] Replace `<pre>` code display with Monaco Editor React component (Completed in v1.6.0)
-- [ ] Wire inline diff view into CTO approval flow (split view: old left, new right)
-- [ ] Add status bar (git branch, active model, token cost counter)
+```python
+TaskRequest          { task: str (1–8000 chars) }
+ApprovalRequest      { status: "approved"|"rejected", revision_notes?: str (≤2000) }
+FileSaveRequest      { path: str, content: str }
+FileCreateRequest    { path: str, is_dir: bool = False }
+FileDeleteRequest    { path: str }
+GitCommitRequest     { message: str (1–500 chars) }
+AutomationRunRequest { url: str (≥4 chars) }
+IntentPreviewRequest { prompt: str (1–4000 chars) }
+CoordinatesRequest   { x: int ≥0, y: int ≥0 }
+KeyboardTypeRequest  { text: str (1–1000 chars) }
+```
+
+All invalid payloads return HTTP 422 with FastAPI's standard validation error body.
+
+### WebSocket Message Formats
+
+**`/ws` — Swarm Events (server → client)**
+```json
+{ "type": "system"|"agent"|"error"|"success", "message": "...", "agent": "CEO"|"Engineer"|"QA" }
+```
+
+**`/ws/terminal` — Terminal I/O (bidirectional)**
+```json
+// client → server
+{ "type": "terminal_in", "data": "ls -la\r\n" }
+{ "type": "terminal_reset" }
+// server → client
+{ "type": "terminal_out", "data": "..." }
+```
+
+---
+
+## 12. Roadmap
+
+### v1.8.0 — Security
+- [ ] Wire `bootstrap.py` `run_shell_command` through `sandbox.wrap_command()`
+- [ ] Add `X-Nexera-Key` header authentication middleware
 
 ### v1.9.0 — Intelligence Upgrade
 - [ ] Add `tiktoken` token counting to all LLM calls
 - [ ] Add token cost tracking table in SQLite + display in status bar
-- [ ] Replace fixed `MSG_LIMIT` with token-aware context window management
+- [ ] Replace fixed `MSG_LIMIT` with token-aware pruning
 - [ ] Add ChromaDB + nomic-embed-text for RAG retrieval over workspace files
 
-### v2.0.0 — Desktop Native
-- [ ] Build Tauri v2 wrapper for `desktop/` — replaces the HTML stub
-- [ ] System tray icon, native window controls, OS-level file associations
-- [ ] Auto-update mechanism
+### v2.0.0 — Native Desktop
+- [ ] Build Tauri v2 wrapper in `desktop/` — replaces the HTML stub
+- [ ] System tray, native window controls, OS file associations
+- [ ] Monaco DiffEditor wired into CTO approval flow (split old/new view)
