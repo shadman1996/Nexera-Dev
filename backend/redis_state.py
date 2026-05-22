@@ -1,4 +1,3 @@
-""
 import redis.asyncio as redis
 
 class RedisState:
@@ -25,5 +24,4 @@ class RedisState:
         if hasattr(self, 'r'):
             await self.r.delete(key)
         else:
-            del self.store[key]
-""
+            del self.store[key]
