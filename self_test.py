@@ -37,17 +37,40 @@ GLYPH_INFO = f"{COLOR_BLUE}ℹ{COLOR_RESET}"
 GLYPH_WARN = f"{COLOR_YELLOW}⚠{COLOR_RESET}"
 GLYPH_SWARM = f"{COLOR_MAGENTA}⚙{COLOR_RESET}"
 
+def safe_print(text, end="\n"):
+    try:
+        sys.stdout.write(text + end)
+        sys.stdout.flush()
+    except UnicodeEncodeError:
+        try:
+            # Fall back to safe characters
+            clean = (text.replace("✓", "[PASS]")
+                         .replace("✗", "[FAIL]")
+                         .replace("ℹ", "[INFO]")
+                         .replace("⚠", "[WARN]")
+                         .replace("⚙", "[SWARM]")
+                         .replace("●", "*")
+                         .replace("★", "SUCCESS"))
+            # Replace any other non-ascii character
+            clean = clean.encode("ascii", "replace").decode("ascii")
+            sys.stdout.write(clean + end)
+            sys.stdout.flush()
+        except Exception:
+            pass
+
 def clear_line():
-    sys.stdout.write("\r\033[K")
-    sys.stdout.flush()
+    try:
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
+    except Exception:
+        pass
 
 def print_header(title):
-    print(f"\n{COLOR_BLUE}● {title.upper()}{COLOR_RESET}")
-    print(f"{COLOR_BLUE}{'=' * 65}{COLOR_RESET}")
+    safe_print(f"\n{COLOR_BLUE}● {title.upper()}{COLOR_RESET}")
+    safe_print(f"{COLOR_BLUE}{'=' * 65}{COLOR_RESET}")
 
 def run_step(name, action_func):
-    sys.stdout.write(f"  {GLYPH_SWARM} {name} ... ")
-    sys.stdout.flush()
+    safe_print(f"  {GLYPH_SWARM} {name} ... ", end="")
     
     start_t = time.time()
     try:
@@ -55,15 +78,15 @@ def run_step(name, action_func):
         duration = time.time() - start_t
         clear_line()
         if success:
-            print(f"  {GLYPH_PASS} {name} ({duration:.2f}s) | {message}")
+            safe_print(f"  {GLYPH_PASS} {name} ({duration:.2f}s) | {message}")
             return True, message
         else:
-            print(f"  {GLYPH_FAIL} {name} ({duration:.2f}s) | {COLOR_RED}{message}{COLOR_RESET}")
+            safe_print(f"  {GLYPH_FAIL} {name} ({duration:.2f}s) | {COLOR_RED}{message}{COLOR_RESET}")
             return False, message
     except Exception as e:
         duration = time.time() - start_t
         clear_line()
-        print(f"  {GLYPH_FAIL} {name} ({duration:.2f}s) | Exception: {COLOR_RED}{e}{COLOR_RESET}")
+        safe_print(f"  {GLYPH_FAIL} {name} ({duration:.2f}s) | Exception: {COLOR_RED}{e}{COLOR_RESET}")
         return False, str(e)
 
 # --- INDIVIDUAL VALIDATION CHECKS ---
@@ -223,11 +246,11 @@ def check_agent_orchestrator():
 
 
 def main():
-    print(f"\n{COLOR_GREEN}================================================================={COLOR_RESET}")
-    print(f"{COLOR_GREEN}    NEXERA OS: SELF-TESTING & DIAGNOSTIC BLUEPRINT GATEWAY     {COLOR_RESET}")
-    print(f"{COLOR_GREEN}================================================================={COLOR_RESET}")
-    print(f"{GLYPH_INFO} Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"{GLYPH_INFO} Workspace: {os.getcwd()}")
+    safe_print(f"\n{COLOR_GREEN}================================================================={COLOR_RESET}")
+    safe_print(f"{COLOR_GREEN}    NEXERA OS: SELF-TESTING & DIAGNOSTIC BLUEPRINT GATEWAY     {COLOR_RESET}")
+    safe_print(f"{COLOR_GREEN}================================================================={COLOR_RESET}")
+    safe_print(f"{GLYPH_INFO} Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    safe_print(f"{GLYPH_INFO} Workspace: {os.getcwd()}")
     
     results = {}
     
@@ -260,19 +283,19 @@ def main():
     total_cnt = len(results)
     health_ratio = (passed_cnt / total_cnt) * 100
     
-    print(f"\n  Tests Run:      {total_cnt}")
-    print(f"  Tests Passed:   {COLOR_GREEN}{passed_cnt}{COLOR_RESET}")
-    print(f"  Tests Failed:   {COLOR_RED if total_cnt - passed_cnt > 0 else COLOR_GREEN}{total_cnt - passed_cnt}{COLOR_RESET}")
+    safe_print(f"\n  Tests Run:      {total_cnt}")
+    safe_print(f"  Tests Passed:   {COLOR_GREEN}{passed_cnt}{COLOR_RESET}")
+    safe_print(f"  Tests Failed:   {COLOR_RED if total_cnt - passed_cnt > 0 else COLOR_GREEN}{total_cnt - passed_cnt}{COLOR_RESET}")
     
     score_color = COLOR_GREEN if health_ratio == 100.0 else COLOR_YELLOW if health_ratio >= 75.0 else COLOR_RED
-    print(f"  Health Score:   {score_color}{health_ratio:.1f}%{COLOR_RESET}")
+    safe_print(f"  Health Score:   {score_color}{health_ratio:.1f}%{COLOR_RESET}")
     
-    print(f"\n{COLOR_GREEN}================================================================={COLOR_RESET}")
+    safe_print(f"\n{COLOR_GREEN}================================================================={COLOR_RESET}")
     if health_ratio == 100.0:
-        print(f"  {COLOR_GREEN}★ SUCCESS: All validation pipelines successfully verified!{COLOR_RESET}")
+        safe_print(f"  {COLOR_GREEN}★ SUCCESS: All validation pipelines successfully verified!{COLOR_RESET}")
     else:
-        print(f"  {COLOR_RED}⚠ ATTENTION: Some validation pipeline tests failed. Review logs!{COLOR_RESET}")
-    print(f"{COLOR_GREEN}=================================================================\n{COLOR_RESET}")
+        safe_print(f"  {COLOR_RED}⚠ ATTENTION: Some validation pipeline tests failed. Review logs!{COLOR_RESET}")
+    safe_print(f"{COLOR_GREEN}=================================================================\n{COLOR_RESET}")
     
     if health_ratio < 100.0:
         sys.exit(1)
