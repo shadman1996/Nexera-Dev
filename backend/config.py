@@ -45,6 +45,9 @@ DEFAULT_CONFIG = {
         "name": "gemini-1.5-pro",
         "api_key_env": "GEMINI_API_KEY",
         "use_for": ["vision", "large_context", "web_research"]
+    },
+    "security": {
+        "api_key": "nexera_master_key_2026"
     }
 }
 
@@ -60,6 +63,10 @@ def load_config() -> dict:
                 data["project"] = DEFAULT_CONFIG["project"]
             if "api_keys" not in data:
                 data["api_keys"] = DEFAULT_CONFIG["api_keys"]
+            if "security" not in data:
+                data["security"] = DEFAULT_CONFIG["security"]
+            elif "api_key" not in data["security"]:
+                data["security"]["api_key"] = DEFAULT_CONFIG["security"]["api_key"]
             if "config_version" not in data["project"]:
                 data["project"]["config_version"] = 1
             if "config_history" not in data["project"]:

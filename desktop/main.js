@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
 function createWindow() {
@@ -7,21 +7,34 @@ function createWindow() {
     height: 800,
     title: "Nexera Core - Desktop Client",
     backgroundColor: '#0a0a0a',
-    frame: true, // Standard OS controls for robustness, dark titlebar enabled
-    titleBarStyle: 'hiddenInset', // Mac-style inset controls if on macOS
+    frame: false,
+    titleBarStyle: 'hidden',
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     }
   });
+
+  // Forward all console logs from the renderer to stdout for debugging
+  win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[Renderer Console] ${message} (at ${path.basename(sourceId)}:${line})`);
+  });
+
+  ipcMain.on('window-close',    () => win.close());
+  ipcMain.on('window-minimize', () => win.minimize());
+  ipcMain.on('window-maximize', () => win.isMaximized() ? win.unmaximize() : win.maximize());
 
   // Enable dark mode theme options natively
   win.webContents.on('dom-ready', () => {
     win.setTitle("Nexera OS - Swarm Workspace");
   });
 
-  // Load the Next.js local dashboard server
-  win.loadURL("http://localhost:3000");
+  // Load the beautiful Obsidian-Coal HTML IDE
+  win.loadFile(path.join(__dirname, 'index.html'));
+
+  // Open DevTools to debug any console/script issues
+  win.webContents.openDevTools();
 
   // Gracefully show the window once layout renders
   win.once('ready-to-show', () => {

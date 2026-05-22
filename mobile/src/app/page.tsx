@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Editor from "@monaco-editor/react";
+import { DiffEditor } from "@monaco-editor/react";
 
 const getLanguageFromPath = (path: string | null): string => {
   if (!path) return "plaintext";
@@ -33,6 +34,7 @@ interface LogMessage {
 interface PendingApproval {
   filepath: string;
   content: string;
+  original_content: string;  // empty string if file is new
 }
 
 interface FileNode {
@@ -110,6 +112,7 @@ export default function NexeraDesktopIDE() {
   const [isExecuting, setIsExecuting] = useState(false);
   const [logs, setLogs] = useState<LogMessage[]>([]);
   const [wsStatus, setWsStatus] = useState("disconnected");
+  const [sandboxMode, setSandboxMode] = useState<"docker" | "host" | "unknown">("unknown");
 
   // Self-Testing & Diagnostic Dashboard States
   const [testRunning, setTestRunning] = useState(false);
@@ -214,7 +217,7 @@ Automated & Manual Testing
   const [collapsedAllTrigger, setCollapsedAllTrigger] = useState(0);
 
   // Terminal Panel Tabs & Shell States
-  const [activeConsoleTab, setActiveConsoleTab] = useState<"system" | "powershell">("system");
+  const [activeConsoleTab, setActiveConsoleTab] = useState<"system" | "output" | "debug" | "powershell" | "ports">("system");
   const [terminalBuffer, setTerminalBuffer] = useState("");
   const [terminalInput, setTerminalInput] = useState("");
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
@@ -407,6 +410,24 @@ Automated & Manual Testing
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+
+  // Conversation history sessions — persisted in SQLite via /api/conversations
+  interface ConvSession { id: string; title: string; messages: any[]; ts: number; project: string; }
+  const [convSessions, setConvSessions] = useState<ConvSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>("default");
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [projectName, setProjectName] = useState<string>("default");
+
+  const fetchConversations = async (proj = projectName) => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/conversations?project=${encodeURIComponent(proj)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setConvSessions(data.map((c: any) => ({ id: c.id, title: c.title, messages: c.messages, ts: new Date(c.updated_at).getTime(), project: c.project_name })));
+      }
+    } catch { /* offline */ }
+  };
 
   const socketRef = useRef<WebSocket | null>(null);
   const terminalSocketRef = useRef<WebSocket | null>(null);
@@ -516,16 +537,52 @@ Automated & Manual Testing
     };
   }, [isListening]);
 
+  const fetchSandboxStatus = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/sandbox/status");
+      if (res.ok) {
+        const data = await res.json();
+        setSandboxMode(data.mode as "docker" | "host");
+      }
+    } catch {
+      setSandboxMode("host");
+    }
+  };
+
   // Connect components on mount
   useEffect(() => {
+    // Intercept all outgoing REST API fetch requests to automatically inject X-Nexera-Key header
+    const originalFetch = window.fetch;
+    window.fetch = function (input, init) {
+      const urlStr = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      if (urlStr.includes("/api/")) {
+        const key = "nexera_master_key_2026";
+        if (init) {
+          const headers = new Headers(init.headers || {});
+          headers.set("X-Nexera-Key", key);
+          init.headers = headers;
+        } else {
+          init = {
+            headers: {
+              "X-Nexera-Key": key
+            }
+          };
+        }
+      }
+      return originalFetch.call(this, input, init);
+    };
+
     connectWebSocket();
     connectTerminalWebSocket();
     refreshFileTree();
     loadConfigFromServer();
     loadGitStatus();
     loadPersonalizationPatterns();
+    fetchSandboxStatus();
+    fetchConversations();
     const interval = setInterval(checkPendingApproval, 1500);
     return () => {
+      window.fetch = originalFetch;
       if (socketRef.current) {
         socketRef.current.onclose = null;
         socketRef.current.close();
@@ -881,7 +938,9 @@ Automated & Manual Testing
               }
             }));
           }
-          speakResponse(data.message);
+          // ⚠️ SILENT BY DEFAULT — speakResponse is only triggered manually via the
+          // speaker bubble icon on each message or when the user unmutes the toggle.
+          // Do NOT auto-speak agent messages here.
         }
 
         if (data.message && (data.message.includes("saved") || data.message.includes("completed"))) {
@@ -971,23 +1030,25 @@ Automated & Manual Testing
   };
 
   const handleCloseWindow = () => {
-    addLog({ type: "system", message: "🔌 Closing Nexera OS Workspace..." });
-    if (typeof window !== "undefined") {
-      const confirmClose = window.confirm("Are you sure you want to close the Nexera OS?");
-      if (confirmClose) {
-        window.close();
-        alert("Nexera session ended. You can now close this tab/window.");
-      }
+    if ((window as any).electronAPI?.isElectron) {
+      (window as any).electronAPI.closeWindow();
+    } else if (window.confirm("Close Nexera OS?")) {
+      window.close();
     }
   };
 
   const handleMinimizeWindow = () => {
-    addLog({ type: "system", message: "⚙️ IDE workspace window minimized." });
-    alert("Minimize: IDE workspace window minimized.");
+    if ((window as any).electronAPI?.isElectron) {
+      (window as any).electronAPI.minimizeWindow();
+    } else {
+      addLog({ type: "system", message: "⚙️ Minimize is only available in the desktop app." });
+    }
   };
 
   const handleMaximizeWindow = () => {
-    if (typeof document !== "undefined") {
+    if ((window as any).electronAPI?.isElectron) {
+      (window as any).electronAPI.maximizeWindow();
+    } else if (typeof document !== "undefined") {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(() => {});
         addLog({ type: "system", message: "🖥️ Maximized to Fullscreen Mode." });
@@ -1017,7 +1078,8 @@ Automated & Manual Testing
     } catch (e) {}
   };
 
-  const speakResponse = (text: string) => {
+  const speakResponse = (text: string, force = false) => {
+    if (isMuted && !force) return;
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
       const cleanText = text.replace(/\[.*?\]/g, "").replace(/[^a-zA-Z0-9.,!? ]/g, "");
@@ -1074,7 +1136,26 @@ Automated & Manual Testing
       isExecutionTrace: true
     };
 
-    setChatMessages((prev) => [...prev, userMsg, assistantMsg]);
+    setChatMessages((prev) => {
+      const updated = [...prev, userMsg, assistantMsg];
+      // Auto-save to DB: update existing session or create a new one
+      const sid = activeSessionId !== "default" ? activeSessionId : null;
+      const title = taskText.slice(0, 60);
+      if (sid) {
+        fetch(`http://127.0.0.1:8000/api/conversations/${sid}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: updated })
+        }).catch(() => {});
+      } else {
+        fetch("http://127.0.0.1:8000/api/conversations", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project_name: projectName, title, messages: updated })
+        }).then(r => r.ok ? r.json() : null).then(d => {
+          if (d?.id) { setActiveSessionId(d.id); setConvSessions(p => [{ id: d.id, title, messages: updated, ts: Date.now(), project: projectName }, ...p]); }
+        }).catch(() => {});
+      }
+      return updated;
+    });
     setIsExecuting(true);
     setLogs([]);
 
@@ -1169,6 +1250,26 @@ Automated & Manual Testing
         alert(`Delete failed: ${errData.message}`);
       }
     } catch (err) {
+      alert("Failed to communicate with workspace API.");
+    }
+  };
+
+  const handleMoveItem = async (sourcePath: string, targetFolderPath: string) => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/workspace/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: sourcePath, destination: targetFolderPath })
+      });
+      if (res.ok) {
+        addLog({ type: "system", message: `📦 Moved '${sourcePath}' → '${targetFolderPath}'` });
+        refreshFileTree();
+      } else {
+        let errMsg = `HTTP ${res.status}`;
+        try { const d = await res.json(); errMsg = d.message || d.detail || errMsg; } catch { /* ignore */ }
+        alert(`Move failed: ${errMsg}`);
+      }
+    } catch {
       alert("Failed to communicate with workspace API.");
     }
   };
@@ -1314,6 +1415,7 @@ Automated & Manual Testing
         activeFile={activeTab || ""}
         onCreateItem={handleCreateItem}
         onDeleteItem={handleDeleteItem}
+        onMoveItem={handleMoveItem}
         selectedNode={selectedNode}
         setSelectedNode={setSelectedNode}
         inlineCreate={inlineCreate}
@@ -1339,14 +1441,14 @@ Automated & Manual Testing
     <div className="h-screen bg-[#1e1e1e] text-[#f4f4f6] flex flex-col font-sans overflow-hidden select-none border border-[#3c3c3c]/70 shadow-[0_0_80px_rgba(0,0,0,0.95)] relative">
       
       {/* 1. Chrome Native Windows Menu & Traffic Controls */}
-      <header className="h-11 bg-[#3c3c3c] backdrop-blur-xl border-b border-[#3c3c3c]/70 flex items-center justify-between px-4 select-none shrink-0 relative z-50 shadow-lg shadow-black/20">
+      <header className="h-11 bg-[#3c3c3c] backdrop-blur-xl border-b border-[#3c3c3c]/70 flex items-center justify-between px-4 select-none shrink-0 relative z-50 shadow-lg shadow-black/20" style={{ WebkitAppRegion: "drag" } as React.CSSProperties}>
         {openMenuDropdown && (
           <div 
             className="fixed inset-0 z-40 bg-transparent" 
             onClick={() => setOpenMenuDropdown(null)} 
           />
         )}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           {/* Windows Window Buttons layout (Mac styling with hover indicators) */}
           <div className="flex items-center gap-1.5 mr-2 group/traffic">
             <span 
@@ -1839,15 +1941,14 @@ Automated & Manual Testing
           </nav>
         </div>
 
-        {/* Global window title */}
-        <div className="absolute left-1/2 -translate-x-1/2 hidden lg:flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#3279F9] animate-ping" />
-          <span className="text-xs font-bold text-transparent bg-clip-text bg-gradient-to-r from-neutral-200 via-white to-neutral-400 tracking-wider font-mono">
-            d: - Nexera{activeTab ? ` - ${activeTab.split("/").pop()}` : ""}
+        {/* Global window title — matches Antigravity IDE screenshot */}
+        <div className="absolute left-1/2 -translate-x-1/2 hidden lg:flex items-center pointer-events-none select-none">
+          <span className="text-[11px] text-[#cccccc] font-normal font-sans">
+            d: · Antigravity IDE{activeTab ? ` — ${activeTab.split("/").pop()}` : ""}
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           {/* Top Panel Controls Toggle layout (Matches screenshot perfectly & operates layout toggles!) */}
           <div className="flex items-center gap-2 border-r border-[#3c3c3c]/70 pr-3 mr-1 text-neutral-500">
             {/* Split Editor / Two Column icon */}
@@ -1900,9 +2001,16 @@ Automated & Manual Testing
             </button>
           </div>
           
-          <span className={`px-2 py-0.5 rounded text-[8px] font-mono tracking-widest ${wsStatus === "connected" ? "bg-emerald-950/40 text-emerald-400 border border-emerald-900/60" : "bg-rose-950/40 text-rose-400 border border-rose-900/60"}`}>
-            ● LOCAL CORE: {wsStatus.toUpperCase()}
-          </span>
+          <button
+            onClick={() => window.location.reload()}
+            className={`px-2.5 py-1 rounded text-[10px] font-sans font-medium flex items-center gap-1.5 transition-colors ${
+              wsStatus === "connected"
+                ? "bg-emerald-700 hover:bg-emerald-600 text-white"
+                : "bg-[#252526] border border-[#3c3c3c] text-[#808080] hover:text-neutral-300"
+            }`}
+          >
+            {wsStatus === "connected" ? "● Connected" : "Reconnect →"}
+          </button>
         </div>
       </header>
 
@@ -3084,39 +3192,53 @@ Automated & Manual Testing
         {/* 4. Center Workspace Pane (Syntax Editor / Welcome Dashboard) */}
         <section className="flex-1 flex flex-col overflow-hidden bg-[#1e1e1e] relative">
           
-          {/* File Open Tabs */}
-          <div className="h-11 bg-[#2d2d30] border-b border-[#3c3c3c] flex items-center px-3 overflow-x-auto shrink-0 select-none custom-scrollbar">
+          {/* File Open Tabs — flat VS Code style */}
+          <div className="h-9 bg-[#2d2d30] border-b border-[#252526] flex items-end overflow-x-auto shrink-0 select-none custom-scrollbar">
             {openTabs.map((tab, idx) => {
               const isActive = activeTab === tab;
               const isUnsaved = unsavedChanges[tab];
               const isStaged = pendingApproval && pendingApproval.filepath === tab;
-              
-              const ext = tab.split(".").pop();
-              let fileIcon = "📄";
-              if (ext === "py") fileIcon = "🐍";
-              else if (ext === "json") fileIcon = "⚙️";
-              else if (ext === "md") fileIcon = "📝";
+              const ext = tab.split(".").pop()?.toLowerCase() ?? "";
+              const iconColor =
+                ext === "py" ? "#3B9FE8"
+                : ext === "tsx" || ext === "ts" ? "#4EC9B0"
+                : ext === "js" || ext === "jsx" ? "#CBCB41"
+                : ext === "json" ? "#CBCB41"
+                : ext === "md" ? "#519ABA"
+                : ext === "css" ? "#56B6C2"
+                : ext === "ps1" ? "#2472C8"
+                : "#cccccc";
+              const iconLabel =
+                ext === "py" ? "py"
+                : ext === "tsx" ? "tsx"
+                : ext === "ts" ? "ts"
+                : ext === "js" || ext === "jsx" ? "js"
+                : ext === "json" ? "{}"
+                : ext === "md" ? "md"
+                : ext === "css" ? "css"
+                : ext === "ps1" ? "ps1"
+                : ext ?? "txt";
 
               return (
                 <div
                   key={`${tab}-${idx}`}
                   onClick={() => setActiveTab(tab)}
-                  className={`h-7 px-3.5 rounded-full mr-2 flex items-center gap-2 cursor-pointer text-[10.5px] font-mono transition-all duration-300 select-none ${
+                  className={`h-full px-3 flex items-center gap-1.5 cursor-pointer text-[11px] font-mono shrink-0 border-r border-[#252526] transition-colors relative group ${
                     isActive
-                      ? "bg-[#0d121f] text-[#3279F9] font-bold border border-[#3279F9]/40 shadow-[0_0_12px_rgba(50,121,249,0.12)]"
-                      : "bg-[#252526]/30 border border-transparent text-[#5F7E97] hover:bg-[#252526]/70 hover:text-neutral-200"
-                  } ${isUnsaved ? "border-amber-500/50 text-amber-400 font-medium" : ""}`}
+                      ? "bg-[#1e1e1e] text-[#cccccc]"
+                      : "bg-[#2d2d30] text-[#808080] hover:text-[#cccccc] hover:bg-[#1e1e1e]/60"
+                  }`}
+                  style={isActive ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
                 >
-                  <span className="text-[11px]">{fileIcon}</span>
-                  <span className="tracking-wide">{tab.split("/").pop()}</span>
-                  {isStaged && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse shrink-0" />}
-                  {isUnsaved && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />}
+                  <span className="text-[9px] font-bold font-mono shrink-0" style={{ color: iconColor }}>{iconLabel}</span>
+                  <span className="max-w-[100px] truncate">{tab.split("/").pop()}</span>
+                  {isUnsaved && !isStaged && <span className="text-amber-400 text-[10px] leading-none">●</span>}
+                  {isStaged && <span className="text-[#3279F9] text-[10px] leading-none animate-pulse">●</span>}
                   <button
                     onClick={(e) => handleCloseTab(tab, e)}
-                    className="w-3.5 h-3.5 hover:bg-neutral-800 hover:text-rose-400 rounded-full flex items-center justify-center text-[9px] ml-1 transition-colors"
-                  >
-                    ×
-                  </button>
+                    className="w-4 h-4 flex items-center justify-center rounded text-[10px] text-neutral-600 hover:text-neutral-200 hover:bg-neutral-700/60 transition-colors ml-0.5 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
+                    data-active={isActive}
+                  >×</button>
                 </div>
               );
             })}
@@ -3228,9 +3350,55 @@ Automated & Manual Testing
                   </div>
                 )}
 
-                {/* Premium Monaco Editor Container */}
+                {/* Premium Monaco Editor / Diff Editor Container */}
                 <div className="flex-1 min-h-0 w-full relative bg-[#1e1e1e] border-t border-neutral-900/40">
                   {activeTab ? (
+                    pendingApproval && pendingApproval.filepath === activeTab ? (
+                      // ─── CTO Diff View: Monaco DiffEditor (old ↔ new) ─────────────────────
+                      <div className="relative h-full w-full flex flex-col">
+                        {/* Diff header banner */}
+                        <div className="h-6 bg-[#252526] border-b border-[#2b2b2b] flex items-center justify-between px-4 shrink-0 select-none">
+                          <div className="flex items-center gap-3 text-[9px] font-mono">
+                            <span className="text-rose-400 font-bold">← ORIGINAL</span>
+                            <span className="text-neutral-600">|</span>
+                            <span className="text-emerald-400 font-bold">PROPOSED →</span>
+                          </div>
+                          <span className="text-[8.5px] font-mono text-[#3279F9] bg-indigo-950/40 border border-indigo-900/30 px-2 py-0.5 rounded">
+                            🛡️ CTO Diff Review — {pendingApproval.filepath}
+                          </span>
+                          <div className="flex items-center gap-1.5 text-[9px] font-mono text-neutral-500">
+                            <span className="bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 rounded">Ctrl+D approve</span>
+                            <span className="bg-neutral-900 border border-neutral-800 px-1.5 py-0.5 rounded">Ctrl+- reject</span>
+                          </div>
+                        </div>
+                        <DiffEditor
+                          height="100%"
+                          theme="vs-dark"
+                          language={getLanguageFromPath(activeTab)}
+                          original={pendingApproval.original_content || ""}
+                          modified={pendingApproval.content}
+                          options={{
+                            fontSize: 12,
+                            lineHeight: 18,
+                            minimap: { enabled: false },
+                            renderSideBySide: true,
+                            readOnly: true,
+                            scrollbar: {
+                              vertical: "visible",
+                              horizontal: "visible",
+                              verticalScrollbarSize: 10,
+                              horizontalScrollbarSize: 10,
+                              useShadows: false
+                            },
+                            fontFamily: "var(--font-mono), Consolas, Monaco, monospace",
+                            wordWrap: "on",
+                            automaticLayout: true,
+                            padding: { top: 12 },
+                          }}
+                        />
+                      </div>
+                    ) : (
+                    // ─── Normal editor ────────────────────────────────────────────────────
                     <Editor
                       height="100%"
                       width="100%"
@@ -3271,6 +3439,7 @@ Automated & Manual Testing
                         insertSpaces: true
                       }}
                     />
+                    )
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-neutral-500 font-mono text-xs">
                       No active document open. Select a file from the explorer pane.
@@ -3389,30 +3558,57 @@ Automated & Manual Testing
           {/* Bottom Console terminal */}
           {isTerminalOpen && (
             <div className="h-44 bg-[#2d2d30] border-t border-[#2b2b2b] flex flex-col overflow-hidden shrink-0">
-              <div className="px-5 border-b border-[#2b2b2b] bg-[#1e1e1e] flex items-center justify-between text-[9px] font-black text-neutral-400 tracking-wider font-mono select-none">
-                <div className="flex items-center gap-4">
+              {/* Bottom panel tab bar — VS Code style */}
+              <div className="h-9 border-b border-[#252526] bg-[#252526] flex items-end justify-between px-2 shrink-0 select-none">
+                <div className="flex items-end h-full">
+                  {/* Problems tab */}
                   <button
                     onClick={() => setActiveConsoleTab("system")}
-                    className={`py-2 transition-all relative font-bold uppercase tracking-wider ${
+                    className={`h-full px-3.5 flex items-center gap-1.5 text-[11px] font-mono border-r border-[#1e1e1e]/0 transition-colors relative ${
                       activeConsoleTab === "system"
-                        ? "text-[#3279F9] border-b-2 border-[#3279F9]"
-                        : "text-neutral-500 hover:text-neutral-300"
+                        ? "text-[#cccccc] bg-[#1e1e1e]"
+                        : "text-[#808080] hover:text-[#cccccc]"
                     }`}
+                    style={activeConsoleTab === "system" ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
                   >
-                    ⚡ SYSTEM SWARM LOGS
+                    Problems
+                    <span className={`text-[9px] px-1 rounded font-bold ${activeConsoleTab === "system" ? "bg-[#3279F9]/20 text-[#3279F9]" : "bg-neutral-700 text-neutral-400"}`}>
+                      {logs.filter(l => l.type === "error").length || 0}
+                    </span>
                   </button>
+                  {/* Output tab */}
+                  <button
+                    onClick={() => setActiveConsoleTab("output")}
+                    className={`h-full px-3.5 flex items-center text-[11px] font-mono transition-colors relative ${activeConsoleTab === "output" ? "text-[#cccccc] bg-[#1e1e1e]" : "text-[#808080] hover:text-[#cccccc]"}`}
+                    style={activeConsoleTab === "output" ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
+                  >Output</button>
+                  {/* Debug Console tab */}
+                  <button
+                    onClick={() => setActiveConsoleTab("debug")}
+                    className={`h-full px-3.5 flex items-center text-[11px] font-mono transition-colors relative ${activeConsoleTab === "debug" ? "text-[#cccccc] bg-[#1e1e1e]" : "text-[#808080] hover:text-[#cccccc]"}`}
+                    style={activeConsoleTab === "debug" ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
+                  >Debug Console</button>
+                  {/* Terminal tab */}
                   <button
                     onClick={() => setActiveConsoleTab("powershell")}
-                    className={`py-2 transition-all relative font-bold uppercase tracking-wider ${
+                    className={`h-full px-3.5 flex items-center text-[11px] font-mono transition-colors relative ${
                       activeConsoleTab === "powershell"
-                        ? "text-[#3279F9] border-b-2 border-[#3279F9]"
-                        : "text-neutral-500 hover:text-neutral-300"
+                        ? "text-[#cccccc] bg-[#1e1e1e]"
+                        : "text-[#808080] hover:text-[#cccccc]"
                     }`}
+                    style={activeConsoleTab === "powershell" ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
                   >
-                    🔌 POWERSHELL SESSION
+                    Terminal
                   </button>
+                  {/* Ports tab */}
+                  <button
+                    onClick={() => setActiveConsoleTab("ports")}
+                    className={`h-full px-3.5 flex items-center text-[11px] font-mono transition-colors relative ${activeConsoleTab === "ports" ? "text-[#cccccc] bg-[#1e1e1e]" : "text-[#808080] hover:text-[#cccccc]"}`}
+                    style={activeConsoleTab === "ports" ? { boxShadow: "inset 0 1px 0 #3279F9" } : {}}
+                  >Ports</button>
                 </div>
-                <div className="flex items-center gap-3">
+                {/* Right-side actions */}
+                <div className="flex items-center gap-2 pb-1.5 text-[#808080]">
                   {activeConsoleTab === "powershell" && (
                     <button
                       onClick={() => {
@@ -3421,23 +3617,27 @@ Automated & Manual Testing
                         }
                         setTerminalBuffer("");
                       }}
-                      className="text-neutral-500 hover:text-rose-400 font-mono transition-colors uppercase font-bold text-[8.5px]"
+                      className="text-[10px] hover:text-neutral-300 font-mono transition-colors flex items-center gap-1"
+                      title="Reset PowerShell session"
                     >
-                      🔄 Reset Session
+                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                     </button>
                   )}
                   <button
                     onClick={() => {
-                      if (activeConsoleTab === "system") {
-                        setLogs([]);
-                      } else {
-                        setTerminalBuffer("");
-                      }
+                      if (activeConsoleTab === "system") setLogs([]);
+                      else if (activeConsoleTab === "output") setLogs(prev => prev.filter(l => l.type !== "system" && l.type !== "success"));
+                      else if (activeConsoleTab === "debug") setLogs(prev => prev.filter(l => l.type !== "agent"));
+                      else if (activeConsoleTab === "powershell") setTerminalBuffer("");
                     }}
-                    className="text-neutral-500 hover:text-neutral-300 font-mono transition-colors uppercase font-bold text-[8.5px]"
+                    className="text-[10px] hover:text-neutral-300 font-mono transition-colors px-1.5 py-0.5 rounded hover:bg-neutral-700/40"
+                    title="Clear"
                   >
-                    CLEAR
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                   </button>
+                  <span className="text-[9px] font-mono text-neutral-600 pr-1 select-none">
+                    {activeConsoleTab === "powershell" ? "PowerShell Extension" : "Nexera Swarm"}
+                  </span>
                 </div>
               </div>
               
@@ -3492,8 +3692,40 @@ Automated & Manual Testing
                   )}
                   <div ref={terminalEndRef} />
                 </div>
+              ) : activeConsoleTab === "output" ? (
+                <div className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-relaxed flex flex-col gap-1 bg-[#1e1e1e] select-text custom-scrollbar">
+                  {logs.filter(l => l.type === "system" || l.type === "success").length === 0
+                    ? <span className="text-neutral-700">No output yet. Run a task to see output here.</span>
+                    : logs.filter(l => l.type === "system" || l.type === "success").map((l, i) => (
+                      <div key={i} className={`pl-3 border-l-2 py-0.5 ${l.type === "success" ? "border-emerald-500 text-emerald-400" : "border-neutral-700 text-neutral-300"}`}>{l.message}</div>
+                    ))
+                  }
+                  <div ref={terminalEndRef} />
+                </div>
+              ) : activeConsoleTab === "debug" ? (
+                <div className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-relaxed flex flex-col gap-1 bg-[#1e1e1e] select-text custom-scrollbar">
+                  {logs.filter(l => l.type === "agent").length === 0
+                    ? <span className="text-neutral-700">No agent traces yet. Start a swarm task to see debug output.</span>
+                    : logs.filter(l => l.type === "agent").map((l, i) => {
+                        const color = l.agent === "CEO" ? "border-violet-500 text-violet-300" : l.agent === "Engineer" ? "border-sky-500 text-sky-300" : "border-emerald-500 text-emerald-300";
+                        return <div key={i} className={`pl-3 border-l-2 py-0.5 ${color}`}><span className="font-bold uppercase">[{l.agent}]</span> {l.message}</div>;
+                      })
+                  }
+                  <div ref={terminalEndRef} />
+                </div>
+              ) : activeConsoleTab === "ports" ? (
+                <div className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-relaxed bg-[#1e1e1e] select-text custom-scrollbar">
+                  <table className="w-full text-[9.5px] font-mono border-collapse">
+                    <thead><tr className="text-neutral-500 border-b border-[#2d2d30] text-left"><th className="py-1.5 pr-6">Port</th><th className="pr-6">Address</th><th className="pr-6">Running Process</th><th>Action</th></tr></thead>
+                    <tbody>
+                      <tr className="border-b border-[#2d2d30] text-neutral-300"><td className="py-1.5 pr-6 text-[#3279F9] font-bold">8000</td><td className="pr-6">127.0.0.1:8000</td><td className="pr-6 text-emerald-400">● Nexera Backend (FastAPI)</td><td><span className="text-[9px] bg-emerald-900/30 text-emerald-400 px-2 py-0.5 rounded">ACTIVE</span></td></tr>
+                      <tr className="border-b border-[#2d2d30] text-neutral-300"><td className="py-1.5 pr-6 text-[#3279F9] font-bold">3000</td><td className="pr-6">localhost:3000</td><td className="pr-6 text-emerald-400">● Next.js Dev Server</td><td><span className="text-[9px] bg-emerald-900/30 text-emerald-400 px-2 py-0.5 rounded">ACTIVE</span></td></tr>
+                      <tr className="text-neutral-300"><td className="py-1.5 pr-6 text-neutral-600">11434</td><td className="pr-6">127.0.0.1:11434</td><td className="pr-6 text-neutral-500">Ollama LLM Server</td><td><span className="text-[9px] bg-neutral-800 text-neutral-500 px-2 py-0.5 rounded">OPTIONAL</span></td></tr>
+                    </tbody>
+                  </table>
+                </div>
               ) : (
-                <div 
+                <div
                   onClick={() => powershellInputRef.current?.focus()}
                   className="flex-1 p-4 overflow-y-auto font-mono text-[9.5px] leading-normal bg-[#1e1e1e] select-text custom-scrollbar font-mono flex flex-col cursor-text"
                 >
@@ -3522,25 +3754,148 @@ Automated & Manual Testing
         </section>
 
         {/* 5. Right-Hand Swarm Chat Sidebar (Accordion DX style) */}
+        {showHistoryPanel && <div className="fixed inset-0 z-40" onClick={() => setShowHistoryPanel(false)} />}
         {isRightSidebarOpen && (
           <section className="w-80 bg-[#252526] border-l border-[#2b2b2b] flex flex-col overflow-hidden shrink-0 select-none">
             
-            {/* Premium Header */}
-            <div className="p-4 border-b border-[#2b2b2b] bg-[#2d2d30] flex items-center justify-between">
-              <span className="text-[10px] font-bold text-transparent bg-clip-text bg-gradient-to-r from-neutral-200 to-[#E3E3E2] uppercase tracking-widest font-mono flex items-center gap-1.5 cursor-pointer">
-                Nexera Autonomous OS Bootstr <span className="text-[7px] text-neutral-500 font-bold">▼</span>
-              </span>
-              <div className="flex items-center gap-1.5 text-neutral-500">
-                <button title="Options" className="p-1 rounded hover:bg-neutral-900/60 hover:text-neutral-300 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                  </svg>
+            {/* Right panel header — VS Code Antigravity style */}
+            <div className="h-9 border-b border-[#252526] bg-[#252526] flex items-center justify-between px-3 shrink-0 select-none relative">
+              <button
+                onClick={() => setShowHistoryPanel(p => !p)}
+                className="text-[11px] font-semibold text-[#cccccc] font-mono truncate flex items-center gap-1.5 hover:text-white transition-colors min-w-0"
+              >
+                <span className="truncate">
+                  {convSessions.find(s => s.id === activeSessionId)?.title || "Nexera Autonomous OS Bootstrap"}
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className={`text-neutral-500 shrink-0 transition-transform ${showHistoryPanel ? "rotate-180" : ""}`}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+              </button>
+
+              {/* History dropdown */}
+              {showHistoryPanel && (
+                <div className="absolute top-9 left-0 right-0 z-50 bg-[#1e1e1e] border border-[#3c3c3c] shadow-2xl max-h-72 overflow-y-auto custom-scrollbar">
+                  {convSessions.length === 0 ? (
+                    <div className="px-4 py-6 text-center text-[10px] text-neutral-600 font-mono">No saved conversations yet.<br/>Click + to start a new one.</div>
+                  ) : (
+                    convSessions.slice().reverse().map((s) => (
+                      <div
+                        key={s.id}
+                        onClick={() => { setChatMessages(s.messages); setActiveSessionId(s.id); setShowHistoryPanel(false); }}
+                        className={`flex items-center justify-between px-3 py-2.5 cursor-pointer border-b border-[#2d2d30] hover:bg-[#2a2d2e] transition-colors group ${s.id === activeSessionId ? "bg-[#252526]" : ""}`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-5 h-5 rounded bg-[#3279F9]/20 flex items-center justify-center shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="#3279F9" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-3 3v-3z" /></svg>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[10px] text-[#cccccc] font-mono truncate max-w-[160px]">{s.title}</div>
+                            <div className="text-[9px] text-neutral-600 font-mono">{new Date(s.ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try { await fetch(`http://127.0.0.1:8000/api/conversations/${s.id}`, { method: "DELETE" }); } catch { /* offline */ }
+                            setConvSessions(p => p.filter(x => x.id !== s.id));
+                            if (s.id === activeSessionId) { setChatMessages([]); setActiveSessionId("default"); }
+                          }}
+                          className="opacity-0 group-hover:opacity-100 text-[10px] text-rose-500 hover:text-rose-400 px-1 transition-all shrink-0"
+                          title="Delete conversation"
+                        >🗑</button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center gap-0.5 text-[#808080] shrink-0">
+                {/* New conversation */}
+                <button
+                  onClick={async () => {
+                    if (chatMessages.length > 0) {
+                      const firstUser = chatMessages.find((m: any) => m.role === "user");
+                      const title = firstUser?.content?.slice(0, 60) || "Conversation";
+                      try {
+                        const res = await fetch("http://127.0.0.1:8000/api/conversations", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ project_name: projectName, title, messages: chatMessages })
+                        });
+                        if (res.ok) {
+                          const { id } = await res.json();
+                          setConvSessions(p => [{ id, title, messages: chatMessages, ts: Date.now(), project: projectName }, ...p]);
+                          setActiveSessionId(id);
+                        }
+                      } catch { /* offline — fall back to local */ }
+                    }
+                    setChatMessages([]);
+                    setShowHistoryPanel(false);
+                  }}
+                  title="New conversation (saves current)"
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 hover:text-neutral-300 transition-colors text-[13px] font-light"
+                >+</button>
+                {/* Reload history */}
+                <button
+                  onClick={() => fetchConversations()}
+                  title="Reload conversation history from database"
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 hover:text-neutral-300 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 </button>
+                {/* Speech Mute/Unmute Toggle */}
+                <button
+                  onClick={() => {
+                    const nextMuted = !isMuted;
+                    setIsMuted(nextMuted);
+                    if (nextMuted) {
+                      window.speechSynthesis?.cancel();
+                    } else {
+                      if (typeof window !== "undefined" && window.speechSynthesis) {
+                        const utterance = new SpeechSynthesisUtterance("Voice synthesis active");
+                        utterance.rate = 1.05;
+                        window.speechSynthesis.speak(utterance);
+                      }
+                    }
+                  }}
+                  title={isMuted ? "Unmute Swarm Speech (AI Text-To-Speech)" : "Mute Swarm Speech (AI Text-To-Speech)"}
+                  className={`w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 transition-colors ${isMuted ? "text-neutral-500" : "text-[#00d8ff] font-bold"}`}
+                >
+                  {isMuted ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l4-4m0 4l-4-4" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    </svg>
+                  )}
+                </button>
+                {/* Close right panel */}
+                <button
+                  onClick={() => setIsRightSidebarOpen(false)}
+                  title="Close panel"
+                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-neutral-700/60 hover:text-neutral-300 transition-colors text-[13px]"
+                >×</button>
               </div>
             </div>
 
+            {/* Project memory context bar */}
+            <div className="flex items-center gap-2 px-3 py-1.5 border-b border-[#2b2b2b] bg-[#1e1e1e]/60 shrink-0">
+              <span className="text-[9px] text-neutral-600 font-mono uppercase tracking-wider shrink-0">Project:</span>
+              <input
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                onBlur={() => fetchConversations(projectName)}
+                onKeyDown={(e) => { if (e.key === "Enter") { fetchConversations(projectName); (e.target as HTMLInputElement).blur(); } }}
+                className="flex-1 bg-transparent text-[10px] font-mono text-[#3279F9] border-b border-transparent focus:border-[#3279F9]/50 outline-none px-0.5 min-w-0"
+                placeholder="default"
+              />
+              <span className="text-[8px] text-neutral-700 font-mono shrink-0">{convSessions.length} saved</span>
+            </div>
+
             <div className="flex-1 p-4 flex flex-col justify-between overflow-hidden">
-              
+
               {/* Message scroll container */}
               <div className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1 custom-scrollbar pb-4 select-text">
                 
@@ -3585,12 +3940,21 @@ Automated & Manual Testing
                       <div className="flex flex-col gap-3 w-full">
                         {/* Text Content */}
                         {msg.content && (
-                          <div className="flex items-start gap-2 max-w-[90%]">
+                          <div className="flex items-start gap-2 max-w-[90%] group">
                             <div className="w-5 h-5 rounded-full bg-indigo-950/50 border border-indigo-900/40 flex items-center justify-center font-bold text-[8px] text-[#00d8ff] shrink-0 font-mono select-none">
                               N
                             </div>
-                            <div className="text-[10px] font-mono text-[#C9D1D9] leading-relaxed whitespace-pre-line bg-[#2d2d30]/80 border border-[#3c3c3c]/80 rounded-2xl rounded-tl-none px-3.5 py-2 shadow-sm">
+                            <div className="relative text-[10px] font-mono text-[#C9D1D9] leading-relaxed whitespace-pre-line bg-[#2d2d30]/80 border border-[#3c3c3c]/80 rounded-2xl rounded-tl-none px-3.5 py-2 shadow-sm pr-8">
                               {msg.content}
+                              <button
+                                onClick={() => speakResponse(msg.content, true)}
+                                title="Read message aloud"
+                                className="absolute right-2 top-2 text-[#808080] hover:text-[#00d8ff] opacity-0 group-hover:opacity-100 transition-opacity p-0.5"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                </svg>
+                              </button>
                             </div>
                           </div>
                         )}
@@ -3810,6 +4174,14 @@ Automated & Manual Testing
                   </button>
                 </div>
 
+                {/* Active model label — matches "Gemini 3.5 Flash (High)" in screenshot */}
+                <div className="flex items-center justify-between px-1 mb-1">
+                  <span className="text-[9px] text-[#808080] font-mono flex items-center gap-1">
+                    {configModelName || "No model selected"}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                  </span>
+                </div>
+
                 {/* Bottom line: Provider Select on Left, Send circular green button on Right */}
                 <div className="flex justify-between items-center px-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -3873,29 +4245,55 @@ Automated & Manual Testing
 
       {/* 6. Status Bar (Bottom Ribbon) */}
       <footer className="h-6 bg-[#252526] border-t border-[#2b2b2b] px-4 flex items-center justify-between text-[10px] font-mono text-neutral-500 shrink-0 select-none">
-        
+
         {/* Left Side Statuses */}
         <div className="flex items-center gap-4">
           <span className="hover:text-indigo-400 cursor-pointer font-bold tracking-wider">Nexera Project</span>
-          <span className="text-[#3279F9] font-bold">🌿 {gitStatus.branch}*</span>
+          <span className="text-[#3279F9] font-bold">🌿 {gitStatus.branch || "master"}*</span>
           <span className="flex items-center gap-1 text-amber-500 font-bold" title="Warnings count">
             <span>⚠</span>
-            <span>13</span>
+            <span>0</span>
           </span>
           <span className="flex items-center gap-1 text-neutral-600 font-bold" title="Errors count">
             <span>✗</span>
             <span>0</span>
           </span>
+          {/* Sandbox mode indicator */}
+          <span
+            title={sandboxMode === "docker" ? "Docker sandbox active — agent commands are containerised" : "Host mode — Docker not detected, running on local OS"}
+            className={`flex items-center gap-1 font-bold cursor-pointer ${sandboxMode === "docker" ? "text-emerald-400" : sandboxMode === "host" ? "text-amber-500" : "text-neutral-600"}`}
+            onClick={fetchSandboxStatus}
+          >
+            <span>{sandboxMode === "docker" ? "🐳" : "⚙"}</span>
+            <span>{sandboxMode === "unknown" ? "SANDBOX..." : sandboxMode === "docker" ? "DOCKER" : "HOST MODE"}</span>
+          </span>
         </div>
 
-        {/* Right Side Statuses matching screenshot perfectly */}
+        {/* Right Side Statuses */}
         <div className="flex items-center gap-4 text-neutral-500 text-[10px]">
-          <span>{activeTab ? `Ln ${activeTab === "testing_report.md" ? "80" : "1"}, Col 1` : "Ln 1, Col 1"}</span>
+          <span>Ln 1, Col 1</span>
           <span>Spaces: 4</span>
           <span>UTF-8</span>
           <span>LF</span>
-          <span className="text-neutral-400">{activeTab ? (activeTab.endsWith(".tsx") ? "{} TypeScript JSX" : activeTab.endsWith(".py") ? "{} Python" : "{} Markdown") : "{} Plaintext"}</span>
-          <span className="text-[#3279F9] font-extrabold tracking-wider hover:text-indigo-400 cursor-pointer">Nexera - Settings</span>
+          <span className="text-neutral-400">
+            {activeTab
+              ? activeTab.endsWith(".tsx") ? "{} TypeScript JSX"
+              : activeTab.endsWith(".ts") ? "{} TypeScript"
+              : activeTab.endsWith(".py") ? "{} Python"
+              : activeTab.endsWith(".json") ? "{} JSON"
+              : activeTab.endsWith(".md") ? "{} Markdown"
+              : activeTab.endsWith(".css") ? "{} CSS"
+              : activeTab.endsWith(".sh") ? "{} Shell"
+              : activeTab.endsWith(".ps1") ? "{} PowerShell"
+              : "{} Plaintext"
+              : "{} Plaintext"}
+          </span>
+          <span
+            onClick={() => handleDockIconClick("settings")}
+            className="text-[#3279F9] font-extrabold tracking-wider hover:text-indigo-400 cursor-pointer"
+          >
+            Nexera - Settings
+          </span>
         </div>
       </footer>
 
@@ -3909,6 +4307,7 @@ interface FileTreeNodeProps {
   activeFile: string;
   onCreateItem: (parentPath: string, name: string, isDir: boolean) => void;
   onDeleteItem: (path: string) => void;
+  onMoveItem: (sourcePath: string, targetFolderPath: string) => void;
   selectedNode: { path: string; isDir: boolean } | null;
   setSelectedNode: (node: { path: string; isDir: boolean } | null) => void;
   inlineCreate: { parentPath: string; isDir: boolean } | null;
@@ -3924,6 +4323,7 @@ function FileTreeNode({
   activeFile,
   onCreateItem,
   onDeleteItem,
+  onMoveItem,
   selectedNode,
   setSelectedNode,
   inlineCreate,
@@ -3933,6 +4333,7 @@ function FileTreeNode({
   collapsedAllTrigger
 }: FileTreeNodeProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   useEffect(() => {
     if (collapsedAllTrigger > 0) {
@@ -3950,8 +4351,21 @@ function FileTreeNode({
     const isSelected = selectedNode?.path === node.path;
 
     return (
-      <div className="pl-1 leading-normal">
-        <div className="flex justify-between items-center group/node hover:bg-neutral-900/20 rounded pr-2">
+      <div
+        className="pl-1 leading-normal"
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+        onDragLeave={(e) => { e.stopPropagation(); setIsDragOver(false); }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragOver(false);
+          const src = e.dataTransfer.getData("text/plain");
+          if (src && src !== node.path && !src.startsWith(node.path + "\\") && !src.startsWith(node.path + "/")) {
+            onMoveItem(src, node.path);
+          }
+        }}
+      >
+        <div className={`flex justify-between items-center group/node rounded pr-2 transition-colors ${isDragOver ? "bg-[#3279F9]/20 border border-[#3279F9]/40" : "hover:bg-neutral-900/20"}`}>
           <button
             onClick={() => {
               setSelectedNode({ path: node.path, isDir: true });
@@ -4027,6 +4441,7 @@ function FileTreeNode({
                 activeFile={activeFile}
                 onCreateItem={onCreateItem}
                 onDeleteItem={onDeleteItem}
+                onMoveItem={onMoveItem}
                 selectedNode={selectedNode}
                 setSelectedNode={setSelectedNode}
                 inlineCreate={inlineCreate}
@@ -4043,7 +4458,7 @@ function FileTreeNode({
   } else {
     const isActive = activeFile === node.path;
     const isSelected = selectedNode?.path === node.path;
-    
+
     const ext = node.name.split(".").pop();
     let fileIcon = "📄";
     if (ext === "py") fileIcon = "🐍";
@@ -4051,7 +4466,10 @@ function FileTreeNode({
     else if (ext === "md") fileIcon = "📝";
 
     return (
-      <div className={`pl-5 py-1 text-[11px] font-mono hover:bg-neutral-900/30 rounded transition-all flex justify-between items-center group/node ${isSelected || isActive ? "text-[#3279F9] font-bold bg-indigo-950/15 border-l-2 border-[#3279F9] pl-4" : "text-[#5F7E97]"}`}>
+      <div
+        draggable
+        onDragStart={(e) => { e.dataTransfer.setData("text/plain", node.path); e.dataTransfer.effectAllowed = "move"; }}
+        className={`pl-5 py-1 text-[11px] font-mono hover:bg-neutral-900/30 rounded transition-all flex justify-between items-center group/node cursor-grab active:cursor-grabbing ${isSelected || isActive ? "text-[#3279F9] font-bold bg-indigo-950/15 border-l-2 border-[#3279F9] pl-4" : "text-[#5F7E97]"}`}>
         <button
           onClick={() => {
             setSelectedNode({ path: node.path, isDir: false });

@@ -3,16 +3,112 @@ import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from typing import Optional
 from backend.websocket_manager import ConnectionManager
 from backend.tools.screenshot_tool import capture_desktop
 from backend.graph import run_task, approval_queue
 from backend.config import load_config, save_config
+
+# ── Request models ─────────────────────────────────────────────
+class TaskRequest(BaseModel):
+    task: str = Field(..., min_length=1, max_length=8000)
+
+class ApprovalRequest(BaseModel):
+    status: str = Field(..., pattern="^(approved|rejected)$")
+    revision_notes: Optional[str] = Field(default="", max_length=2000)
+
+class FileSaveRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+    content: str = Field(default="")
+
+class FileCreateRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+    is_dir: bool = Field(default=False)
+
+class FileDeleteRequest(BaseModel):
+    path: str = Field(..., min_length=1)
+
+class FileMoveRequest(BaseModel):
+    source: str = Field(..., min_length=1)
+    destination: str = Field(..., min_length=1)
+
+class FileRenameRequest(BaseModel):
+    path: str = Field(..., min_length=1)          # relative path to the file/dir to rename
+    new_name: str = Field(..., min_length=1)      # the new basename only (not a full path)
+
+class GitCommitRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=500)
+
+class AutomationRunRequest(BaseModel):
+    url: str = Field(..., min_length=4)
+
+class IntentPreviewRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=4000)
+
+class CoordinatesRequest(BaseModel):
+    x: int = Field(..., ge=0)
+    y: int = Field(..., ge=0)
+
+class KeyboardTypeRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=1000)
+
+class ShorthandSaveRequest(BaseModel):
+    trigger: str = Field(..., min_length=1)
+    expansion: str = Field(..., min_length=1)
+
+class ShorthandDeleteRequest(BaseModel):
+    trigger: str = Field(..., min_length=1)
+
+class ConversationCreateRequest(BaseModel):
+    project_name: str = Field(default="default", max_length=200)
+    title: str = Field(..., min_length=1, max_length=300)
+    messages: list = Field(default=[])
+
+class ConversationUpdateRequest(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=300)
+    messages: Optional[list] = Field(default=None)
+    project_name: Optional[str] = Field(default=None, max_length=200)
+
+class AutomationRequest(BaseModel):
+    action: str = Field(..., pattern="^(click|type|crawl)$")
+    x: Optional[int] = Field(default=None, ge=0)
+    y: Optional[int] = Field(default=None, ge=0)
+    text: Optional[str] = Field(default=None, min_length=1, max_length=1000)
+    url: Optional[str] = Field(default=None, min_length=4)
 
 app = FastAPI(title="Nexera Developer Core", version="1.0.0")
 
 WORKSPACE_DIR = os.path.abspath(os.path.join(os.getcwd(), "workspace"))
 if not os.path.exists(WORKSPACE_DIR):
     os.makedirs(WORKSPACE_DIR, exist_ok=True)
+
+DB_PATH = os.path.join(os.getcwd(), "db.sqlite3")
+
+def _db():
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+# Ensure conversations table exists
+def _init_conv_table():
+    import sqlite3
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            id TEXT PRIMARY KEY,
+            project_name TEXT NOT NULL DEFAULT 'default',
+            title TEXT NOT NULL,
+            messages_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+_init_conv_table()
 
 from backend.tools.sandbox_manager import DockerSandbox
 sandbox = DockerSandbox(WORKSPACE_DIR)
@@ -35,6 +131,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path.startswith("/api") and request.method != "OPTIONS":
+            config_data = load_config()
+            expected_key = config_data.get("security", {}).get("api_key")
+            if expected_key:
+                actual_key = request.headers.get("X-Nexera-Key")
+                if not actual_key or actual_key != expected_key:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"message": "Unauthorized: Invalid or missing X-Nexera-Key header."}
+                    )
+        return await call_next(request)
+
+app.add_middleware(APIKeyMiddleware)
 
 websocket_manager = ConnectionManager()
 
@@ -268,18 +382,12 @@ async def read_workspace_file(path: str):
         return JSONResponse(status_code=500, content={"message": f"Read error: {str(e)}"})
 
 @app.post("/api/workspace/save")
-async def save_workspace_file(request: Request):
+async def save_workspace_file(body: FileSaveRequest):
     try:
-        data = await request.json()
-        path = data.get("path")
-        content = data.get("content", "")
-        if not path:
-            return JSONResponse(status_code=400, content={"message": "Path is required"})
-        
-        abs_path = secure_path(path)
+        abs_path = secure_path(body.path)
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
         with open(abs_path, "w", encoding="utf-8") as f:
-            f.write(content)
+            f.write(body.content)
         return JSONResponse(content={"message": "File saved successfully"})
     except ValueError as ve:
         return JSONResponse(status_code=403, content={"message": str(ve)})
@@ -287,37 +395,26 @@ async def save_workspace_file(request: Request):
         return JSONResponse(status_code=500, content={"message": f"Save error: {str(e)}"})
 
 @app.post("/api/workspace/create")
-async def create_workspace_item(request: Request):
+async def create_workspace_item(body: FileCreateRequest):
     try:
-        data = await request.json()
-        path = data.get("path")
-        is_dir = data.get("is_dir", False)
-        if not path:
-            return JSONResponse(status_code=400, content={"message": "Path is required"})
-        
-        abs_path = secure_path(path)
-        if is_dir:
+        abs_path = secure_path(body.path)
+        if body.is_dir:
             os.makedirs(abs_path, exist_ok=True)
         else:
             os.makedirs(os.path.dirname(abs_path), exist_ok=True)
             if not os.path.exists(abs_path):
                 with open(abs_path, "w", encoding="utf-8") as f:
                     f.write("")
-        return JSONResponse(content={"message": f"{'Directory' if is_dir else 'File'} created successfully"})
+        return JSONResponse(content={"message": f"{'Directory' if body.is_dir else 'File'} created successfully"})
     except ValueError as ve:
         return JSONResponse(status_code=403, content={"message": str(ve)})
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"Create error: {str(e)}"})
 
 @app.post("/api/workspace/delete")
-async def delete_workspace_item(request: Request):
+async def delete_workspace_item(body: FileDeleteRequest):
     try:
-        data = await request.json()
-        path = data.get("path")
-        if not path:
-            return JSONResponse(status_code=400, content={"message": "Path is required"})
-        
-        abs_path = secure_path(path)
+        abs_path = secure_path(body.path)
         if os.path.exists(abs_path):
             if os.path.isdir(abs_path):
                 import shutil
@@ -331,6 +428,125 @@ async def delete_workspace_item(request: Request):
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"Delete error: {str(e)}"})
 
+@app.post("/api/workspace/move")
+async def move_workspace_item(body: FileMoveRequest):
+    try:
+        import shutil
+        src = secure_path(body.source)
+        dest_dir = secure_path(body.destination)
+        if not os.path.exists(src):
+            return JSONResponse(status_code=404, content={"message": "Source not found"})
+        if not os.path.isdir(dest_dir):
+            return JSONResponse(status_code=400, content={"message": "Destination must be a directory"})
+        dest = os.path.join(dest_dir, os.path.basename(src))
+        if os.path.exists(dest):
+            return JSONResponse(status_code=409, content={"message": f"'{os.path.basename(src)}' already exists in destination"})
+        shutil.move(src, dest)
+        return JSONResponse(content={"message": "Moved successfully", "new_path": dest})
+    except ValueError as ve:
+        return JSONResponse(status_code=403, content={"message": str(ve)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Move error: {str(e)}"})
+
+@app.post("/api/workspace/rename")
+async def rename_workspace_item(body: FileRenameRequest):
+    """Rename a file or directory inside the workspace sandbox."""
+    try:
+        import shutil
+        src = secure_path(body.path)
+        if not os.path.exists(src):
+            return JSONResponse(status_code=404, content={"message": "Source not found"})
+        # Validate new_name does not contain path separators (basename only)
+        new_name = os.path.basename(body.new_name.strip())
+        if not new_name or new_name in (".", ".."):
+            return JSONResponse(status_code=400, content={"message": "Invalid new name"})
+        dest = os.path.join(os.path.dirname(src), new_name)
+        if os.path.exists(dest):
+            return JSONResponse(status_code=409, content={"message": f"'{new_name}' already exists"})
+        shutil.move(src, dest)
+        # Compute the new relative path for the frontend
+        new_rel = os.path.relpath(dest, WORKSPACE_DIR).replace("\\", "/")
+        return JSONResponse(content={"message": "Renamed successfully", "new_path": new_rel})
+    except ValueError as ve:
+        return JSONResponse(status_code=403, content={"message": str(ve)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Rename error: {str(e)}"})
+
+
+# ── Conversation Memory DB ──────────────────────────────────────────────────
+
+@app.get("/api/conversations")
+async def list_conversations(project: str = "default"):
+    import json as _json
+    try:
+        conn = _db()
+        rows = conn.execute(
+            "SELECT id, project_name, title, messages_json, created_at, updated_at FROM conversations WHERE project_name=? ORDER BY updated_at DESC",
+            (project,)
+        ).fetchall()
+        conn.close()
+        return JSONResponse(content=[
+            {"id": r["id"], "project_name": r["project_name"], "title": r["title"],
+             "messages": _json.loads(r["messages_json"]),
+             "created_at": r["created_at"], "updated_at": r["updated_at"]}
+            for r in rows
+        ])
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
+@app.post("/api/conversations")
+async def create_conversation(body: ConversationCreateRequest):
+    import json as _json, uuid as _uuid
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    conv_id = str(_uuid.uuid4())
+    try:
+        conn = _db()
+        conn.execute(
+            "INSERT INTO conversations (id, project_name, title, messages_json, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+            (conv_id, body.project_name, body.title, _json.dumps(body.messages), now, now)
+        )
+        conn.commit()
+        conn.close()
+        return JSONResponse(content={"id": conv_id, "message": "Created"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
+@app.put("/api/conversations/{conv_id}")
+async def update_conversation(conv_id: str, body: ConversationUpdateRequest):
+    import json as _json
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    try:
+        conn = _db()
+        row = conn.execute("SELECT * FROM conversations WHERE id=?", (conv_id,)).fetchone()
+        if not row:
+            conn.close()
+            return JSONResponse(status_code=404, content={"message": "Not found"})
+        new_title = body.title if body.title is not None else row["title"]
+        new_msgs = _json.dumps(body.messages) if body.messages is not None else row["messages_json"]
+        new_proj = body.project_name if body.project_name is not None else row["project_name"]
+        conn.execute(
+            "UPDATE conversations SET title=?, messages_json=?, project_name=?, updated_at=? WHERE id=?",
+            (new_title, new_msgs, new_proj, now, conv_id)
+        )
+        conn.commit()
+        conn.close()
+        return JSONResponse(content={"message": "Updated"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
+@app.delete("/api/conversations/{conv_id}")
+async def delete_conversation(conv_id: str):
+    try:
+        conn = _db()
+        conn.execute("DELETE FROM conversations WHERE id=?", (conv_id,))
+        conn.commit()
+        conn.close()
+        return JSONResponse(content={"message": "Deleted"})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
 @app.get("/api/status")
 async def get_status():
     config = load_config()
@@ -339,15 +555,26 @@ async def get_status():
     return {
         "status": "online",
         "model": model_name,
-        "engine": f"{provider.capitalize()} Core"
+        "engine": f"{provider.capitalize()} Core",
+        "sandbox": sandbox.is_active
     }
+
+@app.get("/api/sandbox/status")
+async def get_sandbox_status():
+    """Returns whether the Docker sandbox is available and active."""
+    is_active = sandbox.check_docker_status()
+    return JSONResponse(content={
+        "active": is_active,
+        "mode": "docker" if is_active else "host",
+        "container": sandbox.container_name if is_active else None
+    })
 
 @app.get("/api/config")
 async def get_config_api():
     return JSONResponse(content=load_config())
 
 @app.post("/api/config/save")
-async def save_config_api(request: Request):
+async def save_config_api(request: Request):  # keeps raw Request — config payload is open-ended dict
     try:
         data = await request.json()
         success = save_config(data)
@@ -376,15 +603,11 @@ async def get_pending_approval():
     })
 
 @app.post("/api/approvals/submit")
-async def submit_approval(request: Request):
+async def submit_approval(body: ApprovalRequest):
     """Submits a decision ('approved' or 'rejected') with revision notes."""
-    data = await request.json()
-    status = data.get("status") # 'approved' or 'rejected'
-    notes = data.get("revision_notes", "")
+    status = body.status
+    notes = body.revision_notes or ""
     
-    if status not in ["approved", "rejected"]:
-        return JSONResponse(status_code=400, content={"message": "Invalid approval status"})
-        
     approval_queue["status"] = status
     approval_queue["notes"] = notes
     approval_queue["pending"] = None  # clear immediately so frontend poll stops showing the banner
@@ -401,12 +624,8 @@ async def submit_approval(request: Request):
 # ───────────────────────────────────────────────────────────────
 
 @app.post("/api/start")
-async def start_task(request: Request):
-    data = await request.json()
-    raw_task = data.get('task', '')
-    
-    if not raw_task:
-        return JSONResponse(status_code=400, content={"message": "No task prompt provided"})
+async def start_task(body: TaskRequest):
+    raw_task = body.task
         
     # Preprocess casual typing and expand shorthands using the pattern engine
     from backend.pattern_engine import clean_and_expand_prompt
@@ -498,31 +717,24 @@ async def get_patterns():
     return JSONResponse(content=load_patterns_config())
 
 @app.post("/api/patterns/shorthand")
-async def save_shorthand_api(request: Request):
+async def save_shorthand_api(body: ShorthandSaveRequest):
     from backend.pattern_engine import add_shorthand
-    data = await request.json()
-    trigger = data.get("trigger", "").strip().lower()
-    expansion = data.get("expansion", "").strip()
-    if not trigger or not expansion:
-        return JSONResponse(status_code=400, content={"message": "Trigger and expansion required"})
+    trigger = body.trigger.strip().lower()
+    expansion = body.expansion.strip()
     success = add_shorthand(trigger, expansion)
     return JSONResponse(content={"success": success, "message": "Shorthand trigger successfully saved"})
 
 @app.post("/api/patterns/shorthand/delete")
-async def delete_shorthand_api(request: Request):
+async def delete_shorthand_api(body: ShorthandDeleteRequest):
     from backend.pattern_engine import delete_shorthand
-    data = await request.json()
-    trigger = data.get("trigger", "").strip().lower()
-    if not trigger:
-        return JSONResponse(status_code=400, content={"message": "Trigger required"})
+    trigger = body.trigger.strip().lower()
     success = delete_shorthand(trigger)
     return JSONResponse(content={"success": success, "message": "Shorthand trigger successfully deleted"})
 
 @app.post("/api/patterns/test")
-async def test_pattern_expansion(request: Request):
+async def test_pattern_expansion(body: IntentPreviewRequest):
     from backend.pattern_engine import clean_and_expand_prompt
-    data = await request.json()
-    prompt = data.get("prompt", "").strip()
+    prompt = body.prompt.strip()
     res = clean_and_expand_prompt(prompt, record_stats=False)
     return JSONResponse(content=res)
 
@@ -584,10 +796,9 @@ async def get_git_status():
     })
 
 @app.post("/api/git/commit")
-async def commit_git_changes(request: Request):
+async def commit_git_changes(body: GitCommitRequest):
     from backend.tools.git_ops import git_add, git_commit
-    data = await request.json()
-    message = data.get("message", "Update from Nexera OS").strip()
+    message = body.message.strip()
     
     try:
         # Run add all inside workspace
@@ -607,10 +818,9 @@ async def commit_git_changes(request: Request):
 # ───────────────────────────────────────────────────────────────
 
 @app.post("/api/automation/run")
-async def run_desktop_automation(request: Request):
+async def run_desktop_automation(body: AutomationRequest):
     from backend.tools.automation_ops import trigger_mouse_click, trigger_key_sequence, run_playwright_crawl
-    data = await request.json()
-    action = data.get("action", "") # 'click', 'type', 'crawl'
+    action = body.action
     
     await websocket_manager.broadcast({
         "type": "system",
@@ -619,15 +829,29 @@ async def run_desktop_automation(request: Request):
     
     res = {"success": False, "log": "Unknown action"}
     if action == "click":
-        x = int(data.get("x", 0))
-        y = int(data.get("y", 0))
-        res = trigger_mouse_click(x, y)
+        if body.x is None or body.y is None:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "x"], "msg": "x and y coordinates required for click", "type": "value_error.missing"}]})
+        try:
+            coords = CoordinatesRequest(x=body.x, y=body.y)
+        except Exception as val_err:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "coordinates"], "msg": str(val_err), "type": "value_error"}]})
+        res = trigger_mouse_click(coords.x, coords.y)
     elif action == "type":
-        text = data.get("text", "")
-        res = trigger_key_sequence(text)
+        if body.text is None:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "text"], "msg": "text is required for type action", "type": "value_error.missing"}]})
+        try:
+            kbd = KeyboardTypeRequest(text=body.text)
+        except Exception as val_err:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "text"], "msg": str(val_err), "type": "value_error"}]})
+        res = trigger_key_sequence(kbd.text)
     elif action == "crawl":
-        url = data.get("url", "")
-        res = await run_playwright_crawl(url)
+        if body.url is None:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "url"], "msg": "url is required for crawl action", "type": "value_error.missing"}]})
+        try:
+            crawl_req = AutomationRunRequest(url=body.url)
+        except Exception as val_err:
+            return JSONResponse(status_code=422, content={"detail": [{"loc": ["body", "url"], "msg": str(val_err), "type": "value_error"}]})
+        res = await run_playwright_crawl(crawl_req.url)
         
     await websocket_manager.broadcast({
         "type": "system",
@@ -945,6 +1169,77 @@ async def get_test_status():
         })
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": f"Database read error: {e}"})
+
+@app.get("/api/logs")
+async def get_live_logs(limit: int = 50, phase: str = ""):
+    """
+    Fetch the most recent agent operation logs from SQLite.
+    Optional ?phase=testing|building|coding filter.
+    Optional ?limit=N (default 50, max 200).
+    """
+    import sqlite3
+    limit = min(int(limit), 200)
+    db_path = os.path.join(os.getcwd(), "db.sqlite3")
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        if phase:
+            cursor.execute(
+                "SELECT id, timestamp, agent_name, action, result, phase "
+                "FROM agent_logs WHERE phase = ? ORDER BY id DESC LIMIT ?",
+                (phase, limit)
+            )
+        else:
+            cursor.execute(
+                "SELECT id, timestamp, agent_name, action, result, phase "
+                "FROM agent_logs ORDER BY id DESC LIMIT ?",
+                (limit,)
+            )
+        rows = cursor.fetchall()
+        conn.close()
+        return JSONResponse(content={"logs": [dict(r) for r in rows], "total": len(rows)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Log fetch error: {e}"})
+
+
+@app.get("/api/token-usage")
+async def get_token_usage():
+    """
+    v1.9.0 — Returns per-agent token usage estimates tracked in agent_logs.
+    Sums estimated input tokens from all logged LLM calls.
+    Integrate tiktoken for precise counts in v2.0.
+    """
+    import sqlite3
+    db_path = os.path.join(os.getcwd(), "db.sqlite3")
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) as total_calls, agent_name FROM agent_logs GROUP BY agent_name ORDER BY total_calls DESC"
+        )
+        rows = cursor.fetchall()
+        # Estimate token usage: average ~250 tokens per logged action
+        usage = []
+        grand_total = 0
+        for row in rows:
+            est_tokens = row["total_calls"] * 250
+            grand_total += est_tokens
+            usage.append({
+                "agent": row["agent_name"],
+                "calls": row["total_calls"],
+                "estimated_tokens": est_tokens
+            })
+        conn.close()
+        return JSONResponse(content={
+            "agents": usage,
+            "grand_total_estimated_tokens": grand_total,
+            "note": "Estimated at ~250 tokens/call. Integrate tiktoken for precise counts."
+        })
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Token usage fetch error: {e}"})
+
 
 if __name__ == "__main__":
     import uvicorn

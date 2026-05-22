@@ -353,6 +353,16 @@ def read_file(filepath: str) -> str:
         return f"ERROR: Failed to read '{filepath}': {e}"
 
 
+# Try to initialize Docker Sandbox gateway for secure shell isolation
+sandbox = None
+try:
+    from backend.tools.sandbox_manager import DockerSandbox
+    sandbox = DockerSandbox(str(WORKSPACE_DIR))
+    sandbox.check_docker_status()
+except Exception:
+    pass
+
+
 @tool
 def run_shell_command(command: str, working_dir: str = ".") -> str:
     """Execute a shell command and return stdout, stderr, and exit code.
@@ -372,8 +382,30 @@ def run_shell_command(command: str, working_dir: str = ".") -> str:
 
     show_command_run(command)
 
+    # Wrap the command using DockerSandbox if available and active!
+    wrapped_cmd = command
+    use_docker = False
     try:
-        if sys.platform == "win32":
+        if sandbox and sandbox.is_active:
+            try:
+                rel_path = cwd.relative_to(WORKSPACE_DIR)
+                container_cwd = f"/workspace/{rel_path.as_posix()}".rstrip("/")
+            except ValueError:
+                container_cwd = "/workspace"
+            
+            wrapped_cmd = sandbox.wrap_command(command, container_cwd)
+            use_docker = True
+    except Exception:
+        pass
+
+    try:
+        if use_docker:
+            result = subprocess.run(
+                wrapped_cmd, shell=True,
+                capture_output=True, text=True, timeout=CMD_TIMEOUT,
+                cwd=str(cwd), encoding="utf-8", errors="replace"
+            )
+        elif sys.platform == "win32":
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", command],
                 capture_output=True, text=True, timeout=CMD_TIMEOUT,

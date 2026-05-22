@@ -1,4 +1,3 @@
-""
 import asyncio
 from fastapi import WebSocket
 
@@ -22,5 +21,4 @@ class ConnectionManager:
             except Exception:
                 broken_connections.append(connection)
         for connection in broken_connections:
-            self.disconnect(connection)
-""
+            self.disconnect(connection)

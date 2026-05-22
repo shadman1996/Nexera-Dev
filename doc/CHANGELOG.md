@@ -4,6 +4,67 @@ All notable changes to the **Nexera OS** platform will be documented in this fil
 
 ---
 
+## [1.9.0] - 2026-05-22
+### Fixed — Manual Voice Control
+- **Auto-Speak Bug Removed**: Nexera no longer automatically speaks every agent message. The `speakResponse(data.message)` call in the WS `onmessage` agent branch has been removed.
+- **Voice is 100% user-controlled**: Speech only fires on (1) clicking the 🔊 bubble icon on a message, (2) toggling the Mute/Unmute button in the chat header, or (3) explicit mic/screen actions.
+
+### Added — Backend API Expansion
+- **`POST /api/workspace/rename`**: Rename any file or directory in the workspace sandbox. Accepts `{ path, new_name }`. Returns `{ new_path }`. Security: basename-only validation blocks path traversal. HTTP 409 on name collision.
+- **`GET /api/logs`**: Live telemetry log feed from SQLite `agent_logs`. Supports `?limit=N` (max 200) and `?phase=` filter. Returns `{ logs[], total }`.
+- **`GET /api/token-usage`**: v1.9.0 token usage tracker — groups `agent_logs` by agent, returns per-agent call counts and estimated tokens (~250 tokens/call). Roadmap: tiktoken integration in v2.0.
+- **`FileRenameRequest` Pydantic model**: Added with `path` and `new_name` validated fields.
+
+### Added — Desktop App
+- **Desktop HTML App launched**: `desktop/index.html` opened in the default system browser. VS Code Dark+ themed standalone IDE accessible without the Next.js dev server.
+
+### Verified
+- `backend/main.py` → ✅ AST OK
+- `mobile/` TypeScript → ✅ 0 errors
+- Git commit: `7936ac5` — 9 files changed, 337 insertions
+
+---
+
+## [1.8.0] - 2026-05-22
+### Changed — Antigravity IDE Design Match
+- **Flat VS Code Tabs**: Replaced rounded pill tabs with flat rectangular VS Code-style tabs. Each tab has a colored language badge (`py` in blue, `tsx` in teal, `md` in blue-grey, etc.), active tab has a cobalt top-border accent (`box-shadow: inset 0 1px 0 #3279F9`), inactive tabs are `#2d2d30`, hover reveals `×` close button.
+- **Bottom Panel — VS Code tab row**: Replaced all-caps "SYSTEM SWARM LOGS / POWERSHELL SESSION" with flat VS Code-style tab bar: **Problems** (with error count badge) | **Output** | **Debug Console** | **Terminal** | **Ports**. Active tab has top-border cobalt accent. Right side shows panel name + reset/clear icon buttons.
+- **Right Panel Header**: Replaced single-button header with VS Code-style `Nexera Autonomous OS Bootstrap` title + `+` (new conversation), `⟲` (refresh), `×` (close panel) buttons. Matches the Antigravity IDE screenshot exactly.
+- **Title Bar**: Updated center title from gradient `d: - Nexera` to clean `d: · Antigravity IDE — {activeFileName}` matching the screenshot. Removed pulsing dot.
+- **Header connection chip**: Replaced `● LOCAL CORE: CONNECTED` pill with a clean `● Connected` / `Reconnect →` button in emerald/grey.
+- **Active model label**: Added `{configModelName} ▾` label above the agent pills in the chat input area, matching the "Gemini 3.5 Flash (High)" label in the screenshot.
+
+### Added — API Key Header Authentication & Global Integration
+- **`APIKeyMiddleware`**: Restricts all direct REST routes `/api/*` to require the custom `X-Nexera-Key` validation header matching the `"security.api_key"` defined in `nexera.config.json` (defaults to `"nexera_master_key_2026"`).
+- **CORS Preflight Bypass**: Bypasses CORS standard `OPTIONS` requests within the middleware to prevent browser blocking.
+- **WebSocket Streaming & Docs Bypass**: Bypasses WebSocket upgrade handshakes (`/ws`, `/ws/terminal`) and Swagger (`/docs`) endpoints from header enforcement.
+- **Root Page Fetch Interceptors**: Dynamically intercepts all client-side network requests via monkeypatched `window.fetch` inside `mobile/src/app/page.tsx`, `mobile/src/app/web/page.tsx`, and `mobile/src/app/mobile/page.tsx` React mount hooks to automatically inject the security header globally.
+- **Desktop reference styling fetch upgrade**: Added `X-Nexera-Key` header injection to the core `req()` fetch handler inside `desktop/index.html`.
+- **Comprehensive Backend Security Tests**: Integrated `TestSecurityMiddleware` inside `workspace/test_backend.py` covering key validation cases, failing 401s, wrong keys, and correct keys.
+
+### Verified
+- TypeScript: 0 errors
+- Unittests: 10/10 tests passing cleanly
+
+---
+
+## [1.7.0] - 2026-05-22
+### Added
+- **Pydantic Request Validation**: All FastAPI POST endpoints now use typed Pydantic models instead of raw `request.json()`. Added: `TaskRequest`, `ApprovalRequest`, `FileSaveRequest`, `FileCreateRequest`, `FileDeleteRequest`, `GitCommitRequest`, `AutomationRunRequest`, `IntentPreviewRequest`, `CoordinatesRequest`, `KeyboardTypeRequest`. Invalid payloads now return structured 422 errors automatically.
+- **`GET /api/sandbox/status`**: New endpoint returns `{ active, mode, container }`. `mode` is `"docker"` when the Docker daemon is reachable, `"host"` otherwise. Used by the status bar.
+- **`GET /api/status` sandbox field**: Existing health endpoint now includes `"sandbox": true/false` to report Docker availability alongside model/engine info.
+- **Status Bar Sandbox Indicator**: The bottom status bar now shows a live sandbox mode chip — 🐳 **DOCKER** (green) when the `nexera-sandbox` container is running, ⚙ **HOST MODE** (amber) as fallback. Click to re-check. Status fetched on mount from `/api/sandbox/status`.
+- **Status Bar file-type detection**: Right side of the status bar now correctly labels `.ts`, `.json`, `.css`, `.sh`, `.ps1` in addition to `.tsx`, `.py`, `.md`.
+- **"Nexera - Settings" status bar button**: Clicking the settings label in the status bar now directly opens the Settings panel in the sidebar.
+- **Muted Swarm Speech Control**: Added interactive Sound Mute/Unmute toggle button inside the Right-Hand Swarm Chat Sidebar header. Swarm Text-to-Speech (TTS) is muted by default (`isMuted: true`), ensuring zero unsolicited/automatic speaking.
+- **Manual Read-Aloud Triggers**: Introduced hover-visible speaker button (`group-hover:opacity-100`) directly on assistant message bubbles. Clicking it activates speech synthesis dynamically, overriding the global mute state.
+
+### Verified
+- TypeScript: 0 errors
+- All Pydantic models validated — field constraints (`min_length`, `max_length`, `pattern`, `ge`) enforced at the framework boundary
+
+---
+
 ## [1.6.0] - 2026-05-22
 ### Added
 - **Premium Monaco Editor Integration**: Replaced the legacy textarea editor in the center pane (`mobile/src/app/page.tsx`) with a high-fidelity, LSP-ready Monaco Editor (`@monaco-editor/react`) featuring VS Code Dark+ styling, dynamic syntax/language mapping based on active document file extensions, auto-closing brackets, smooth blink animations, and a dedicated `Ctrl+S` saving command intercept.
