@@ -294,14 +294,49 @@ class QA(Agent):
         super().__init__("QA", "Automated QA & Tester", websocket_manager)
 
     async def execute(self, code: str) -> dict:
-        await self.log("🔍 Checking code integrity...")
+        await self.log("🔍 Running syntax check and unit test suite...")
+        # 1. First run the basic compile sanity
         try:
             compile(code, "<string>", "exec")
-            await self.log("✅ Code integrity verified: PASSED!")
-            return {"success": True, "details": "Syntax valid."}
         except SyntaxError as syntax_err:
-            await self.log(f"❌ Code integrity check FAILED: {syntax_err}")
-            return {"success": False, "details": str(syntax_err)}
+            await self.log(f"❌ Syntax validation FAILED: {syntax_err}")
+            return {"success": False, "details": f"Python Syntax Error: {syntax_err}"}
+            
+        # 2. Run Python unittest on the workspace
+        import subprocess
+        try:
+            await self.log("⚙️ Spawning workspace unittest runner process...")
+            result = await asyncio.to_thread(
+                subprocess.run,
+                "python -m unittest discover -s workspace -p \"test_*.py\"",
+                shell=True,
+                cwd=os.getcwd(),
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                await self.log("✅ Workspace tests PASSED successfully!")
+                return {"success": True, "details": "Syntax valid & all unit tests passed."}
+            else:
+                stderr_log = result.stderr or ""
+                stdout_log = result.stdout or ""
+                combined_err = f"{stderr_log}\n{stdout_log}".strip()
+                await self.log("❌ Workspace unit test suite FAILED!")
+                
+                # Extract clean traceback/error message summary (grab last 12 lines)
+                traceback_lines = [line for line in combined_err.split("\n") if line.strip()]
+                short_err = "\n".join(traceback_lines[-12:])
+                await self.log(f"🔴 Captured failure traceback summary:\n{short_err}")
+                return {
+                    "success": False,
+                    "details": f"Test Execution Failure:\n{combined_err}"
+                }
+        except Exception as e:
+            await self.log(f"❌ Test subprocess execution encountered a runtime error: {e}")
+            return {"success": False, "details": f"Tester Exception: {str(e)}"}
+
 
 
 async def run_task(task: str, websocket_manager: ConnectionManager = None):

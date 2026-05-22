@@ -90,6 +90,12 @@ export default function NexeraDesktopIDE() {
   const [logs, setLogs] = useState<LogMessage[]>([]);
   const [wsStatus, setWsStatus] = useState("disconnected");
 
+  // Self-Testing & Diagnostic Dashboard States
+  const [testRunning, setTestRunning] = useState(false);
+  const [testResults, setTestResults] = useState<any>(null);
+  const [activeTestTab, setActiveTestTab] = useState<"all" | "passed" | "failed">("all");
+  const [isHealing, setIsHealing] = useState(false);
+
   // Layout Panel States matching the top right controls in screenshot!
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isTerminalOpen, setIsTerminalOpen] = useState(true);
@@ -192,6 +198,67 @@ Automated & Manual Testing
   const [terminalInput, setTerminalInput] = useState("");
   const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  const runSelfTests = async () => {
+    if (testRunning) return;
+    setTestRunning(true);
+    setTestResults(null);
+    addLog({ type: "system", message: "🚀 [Self-Tester]: Running multi-faceted system diagnostics..." });
+    
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/test/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      setTestResults(data);
+      if (data.success) {
+        addLog({ type: "success", message: "✨ [Self-Tester]: All tests and scans completed with 100% success!" });
+      } else {
+        addLog({ type: "error", message: `❌ [Self-Tester]: Self-tests failed. Passed ${data.tests?.passed || 0}/${data.tests?.total || 0} unit tests.` });
+      }
+    } catch (err: any) {
+      addLog({ type: "error", message: `❌ [Self-Tester]: Failed calling test endpoints: ${err.message}` });
+    } finally {
+      setTestRunning(false);
+    }
+  };
+
+  const autoHealCodebase = async () => {
+    if (isHealing || isExecuting) return;
+    if (!testResults || testResults.success) {
+      addLog({ type: "system", message: "💡 [Swarm Swifter]: No test failures detected. Auto-healing is not required!" });
+      return;
+    }
+    
+    setIsHealing(true);
+    addLog({ type: "system", message: "🪄 [Swarm Swifter]: Initializing swarm self-healing routines to repair test suite..." });
+    
+    // Gather failed test names and details
+    const failures = testResults.tests?.tests?.filter((t: any) => t.status !== "passed") || [];
+    const failureContext = failures.map((f: any) => `Test Name: ${f.name}\nTraceback: ${f.message}`).join("\n\n");
+    
+    const healPrompt = `Auto-heal failing unit tests in workspace:\n${failureContext}\nAnalyze the failures, identify the buggy files, rewrite/fix the bugs, run tests, and restore green status.`;
+    
+    try {
+      setIsExecuting(true);
+      const response = await fetch("http://127.0.0.1:8000/api/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: healPrompt }),
+      });
+      if (response.ok) {
+        addLog({ type: "system", message: "🚀 Swarm Auto-Healing loop initiated. Check Swarm Chat for updates!" });
+      } else {
+        addLog({ type: "error", message: "❌ Failed starting swarm healing process." });
+      }
+    } catch (err: any) {
+      addLog({ type: "error", message: `❌ Error initiating swarm: ${err.message}` });
+    } finally {
+      setIsHealing(false);
+      setIsExecuting(false);
+    }
+  };
 
   const startInlineCreate = (isDir: boolean) => {
     let parentPath = "";
@@ -1238,7 +1305,7 @@ Automated & Manual Testing
   };
 
   // Toggle Dock Icons with Smart Sidebar open/close
-  const handleDockIconClick = (panel: "explorer" | "search" | "git" | "run" | "extensions" | "brain" | "viewport" | "settings") => {
+  const handleDockIconClick = (panel: "explorer" | "search" | "git" | "run" | "extensions" | "brain" | "viewport" | "settings" | "agents") => {
     if (activePanel === panel) {
       setIsSidebarOpen(!isSidebarOpen);
     } else {
@@ -1248,10 +1315,10 @@ Automated & Manual Testing
   };
 
   return (
-    <div className="h-screen bg-[#1e1e1e] text-[#f4f4f6] flex flex-col font-sans overflow-hidden select-none border border-[#1b1c24]/50 shadow-[0_0_80px_rgba(0,0,0,0.95)] relative">
+    <div className="h-screen bg-[#1e1e1e] text-[#f4f4f6] flex flex-col font-sans overflow-hidden select-none border border-[#3c3c3c]/70 shadow-[0_0_80px_rgba(0,0,0,0.95)] relative">
       
       {/* 1. Chrome Native Windows Menu & Traffic Controls */}
-      <header className="h-11 bg-[#3c3c3c] backdrop-blur-xl border-b border-[#1b1c24]/50 flex items-center justify-between px-4 select-none shrink-0 relative z-50 shadow-lg shadow-black/20">
+      <header className="h-11 bg-[#3c3c3c] backdrop-blur-xl border-b border-[#3c3c3c]/70 flex items-center justify-between px-4 select-none shrink-0 relative z-50 shadow-lg shadow-black/20">
         {openMenuDropdown && (
           <div 
             className="fixed inset-0 z-40 bg-transparent" 
@@ -1761,7 +1828,7 @@ Automated & Manual Testing
 
         <div className="flex items-center gap-3">
           {/* Top Panel Controls Toggle layout (Matches screenshot perfectly & operates layout toggles!) */}
-          <div className="flex items-center gap-2 border-r border-[#1b1c24]/50 pr-3 mr-1 text-neutral-500">
+          <div className="flex items-center gap-2 border-r border-[#3c3c3c]/70 pr-3 mr-1 text-neutral-500">
             {/* Split Editor / Two Column icon */}
             <button
               onClick={() => {
@@ -1822,7 +1889,7 @@ Automated & Manual Testing
       <div className="flex-1 flex overflow-hidden">
         
         {/* 2. Left Activity Dock Icons (Nexera Ribbon Panel) */}
-        <aside className="w-14 bg-[#333333] border-r border-[#1b1c24]/50 flex flex-col items-center py-4 justify-between shrink-0 select-none">
+        <aside className="w-14 bg-[#333333] border-r border-[#3c3c3c]/70 flex flex-col items-center py-4 justify-between shrink-0 select-none">
           <div className="flex flex-col gap-4 items-center w-full">
             {/* Nexera "N" Logo with rotating gradient shield and neon shadow */}
             <div className="relative w-9 h-9 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-all duration-300 group/logo">
@@ -2135,64 +2202,233 @@ Automated & Manual Testing
             <div className="flex flex-col flex-1 overflow-hidden font-mono text-[10px]">
               <div className="p-4 border-b border-[#3c3c3c] bg-[#2d2d30] flex flex-col gap-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9.5px] font-bold text-neutral-400 uppercase tracking-widest block">Run and Debug</span>
-                  <span className="text-neutral-500 hover:text-neutral-300 cursor-pointer">•••</span>
+                  <span className="text-[9.5px] font-bold text-neutral-400 uppercase tracking-widest block">Run, Debug & Self-Test Hub</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${testRunning ? "bg-[#3279F9] animate-pulse" : "bg-[#10b981]"}`} />
+                    <span className="text-[7.5px] text-neutral-500 font-bold uppercase tracking-wider">Gateway Link</span>
+                  </div>
                 </div>
               </div>
               
-              <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 custom-scrollbar">
+              <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 custom-scrollbar bg-[#19191a]/30">
                 
-                {/* Run & Debug Button */}
+                {/* 1. Core Actions */}
                 <div className="flex flex-col gap-2">
                   <button
-                    onClick={() => {
-                      addLog({ type: "system", message: "🚀 [Debugger]: Initiating active runtime compile check..." });
-                      addLog({ type: "success", message: "✅ [Debugger]: Environment compiled with zero errors." });
-                    }}
-                    className="w-full bg-[#10b981] hover:bg-[#059669] text-white rounded-lg py-2 font-bold font-mono tracking-wider active:scale-[0.98] transition-all"
+                    onClick={runSelfTests}
+                    disabled={testRunning}
+                    className={`w-full py-2.5 font-bold font-mono tracking-wider active:scale-[0.98] transition-all rounded-lg select-none text-white ${
+                      testRunning
+                        ? "bg-[#1e293b] border border-neutral-800 text-neutral-400 cursor-not-allowed"
+                        : "bg-[#10b981] hover:bg-[#059669] shadow-[0_0_12px_rgba(16,185,129,0.25)] hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] active:translate-y-[0.5px]"
+                    }`}
                   >
-                    Run and Debug
+                    {testRunning ? "🔄 Running Self-Tests..." : "🚀 Run Swarm Self-Tests"}
                   </button>
-                  <p className="text-[8.5px] text-neutral-500 leading-snug">
-                    To customize Run and Debug{" "}
-                    <span 
-                      onClick={() => addLog({ type: "system", message: "⚙️ [Debugger]: launch.json schema loaded inside workspace editor." })}
-                      className="text-[#3279F9] hover:underline cursor-pointer font-semibold"
+
+                  {testResults && !testResults.success && (
+                    <button
+                      onClick={autoHealCodebase}
+                      disabled={isHealing || isExecuting}
+                      className={`w-full py-2.5 font-bold font-mono tracking-wider active:scale-[0.98] transition-all rounded-lg select-none text-white bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 shadow-[0_0_15px_rgba(217,119,6,0.3)] animate-pulse ${
+                        (isHealing || isExecuting) ? "opacity-60 cursor-not-allowed" : ""
+                      }`}
                     >
-                      create a launch.json file
-                    </span>
-                    .
-                  </p>
+                      {isHealing ? "🪄 Auto-Healing Suite..." : "✨ Swarm Auto-Heal Codebase"}
+                    </button>
+                  )}
                 </div>
 
-                {/* JS Debug Terminal option */}
-                <div className="flex flex-col gap-2 border-t border-[#2b2b2b]/60 pt-3">
-                  <button
-                    onClick={() => {
-                      addLog({ type: "system", message: "🐞 [Debugger]: Spawned dedicated JavaScript Debug Session." });
-                    }}
-                    className="w-full bg-[#1e293b] hover:bg-[#334155] border border-neutral-800 text-neutral-300 rounded py-2 font-bold font-mono tracking-wider active:scale-[0.98] transition-all"
-                  >
-                    JavaScript Debug Terminal
-                  </button>
-                  <p className="text-[8.5px] text-neutral-500 leading-snug">
-                    You can use the JavaScript Debug Terminal to debug Node.js processes run on the command line.
-                  </p>
+                {/* 2. System Status Overview */}
+                <div className="bg-[#1b1c1e] border border-[#2b2b2b] p-3.5 rounded-xl shadow-lg relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-[#3279F9]/5 blur-2xl rounded-full pointer-events-none" />
+                  <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2.5">
+                    IDE Diagnostics Overview
+                  </span>
+
+                  {!testResults ? (
+                    <div className="text-neutral-500 text-[8.5px] leading-relaxed py-1.5 flex flex-col gap-2">
+                      <p>🔍 No diagnostic scans executed for active work cycle.</p>
+                      <p className="text-[7.5px] opacity-70">Click &quot;Run Swarm Self-Tests&quot; to compile, check AST nodes, and discover python unittests.</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {/* Health Progress Bar */}
+                      <div>
+                        <div className="flex items-center justify-between text-[9px] mb-1.5">
+                          <span className="text-neutral-300 font-semibold uppercase">Ecosystem Health</span>
+                          <span className={`font-black tracking-wider ${testResults.success ? "text-[#10b981]" : "text-[#ef4444]"}`}>
+                            {testResults.tests?.total > 0
+                              ? `${Math.round((testResults.tests.passed / testResults.tests.total) * 100)}% SUCCESS`
+                              : testResults.success ? "100% SUCCESS" : "0% SUCCESS"}
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-[#090A0D] rounded-full overflow-hidden border border-[#2c2d30]">
+                          <div
+                            className={`h-full transition-all duration-700 ${testResults.success ? "bg-[#10b981]" : "bg-[#ef4444]"}`}
+                            style={{
+                              width: testResults.tests?.total > 0
+                                ? `${(testResults.tests.passed / testResults.tests.total) * 100}%`
+                                : testResults.success ? "100%" : "0%"
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Scans Grid */}
+                      <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-[#2b2b2b]/50">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[7.5px] text-neutral-500 uppercase">Py AST</span>
+                          <span className={`text-[9px] font-bold ${testResults.ast?.success ? "text-[#10b981]" : "text-[#ef4444]"}`}>
+                            {testResults.ast?.success ? "✓ PASSED" : "✗ ERROR"}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[7.5px] text-neutral-500 uppercase">TS React</span>
+                          <span className={`text-[9px] font-bold ${testResults.tsc?.success ? "text-[#10b981]" : "text-[#ef4444]"}`}>
+                            {testResults.tsc?.success ? "✓ COMPILED" : "✗ FAILED"}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[7.5px] text-neutral-500 uppercase">Duration</span>
+                          <span className="text-[9px] font-bold text-neutral-300">
+                            {testResults.tests?.duration || "0.00"}s
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Debug URL option */}
-                <div className="flex flex-col gap-2 border-t border-[#2b2b2b]/60 pt-3">
-                  <button
-                    onClick={() => {
-                      const url = prompt("Enter URL to debug:", "http://localhost:3000");
-                      if (url) {
-                        addLog({ type: "system", message: `🐞 [Debugger]: Listening on headless debugging stream for target ${url}` });
-                      }
-                    }}
-                    className="w-full bg-[#1e293b] hover:bg-[#334155] border border-neutral-800 text-neutral-300 rounded py-2 font-bold font-mono tracking-wider active:scale-[0.98] transition-all"
-                  >
-                    Debug URL
-                  </button>
+                {/* 3. Discovered Test Cases Grid */}
+                {testResults && testResults.tests?.tests && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-[8px] font-black text-neutral-500 uppercase tracking-widest px-0.5">
+                      <span>Unit Tests ({testResults.tests.tests.length})</span>
+                      
+                      {/* Filter tabs */}
+                      <div className="flex items-center gap-1 bg-[#090A0D]/60 p-0.5 rounded border border-[#2c2d30]">
+                        <button
+                          onClick={() => setActiveTestTab("all")}
+                          className={`px-1.5 py-0.5 rounded text-[7px] font-mono cursor-pointer transition-all ${
+                            activeTestTab === "all" ? "bg-[#3279F9] text-white" : "text-neutral-400 hover:text-neutral-200"
+                          }`}
+                        >
+                          All
+                        </button>
+                        <button
+                          onClick={() => setActiveTestTab("passed")}
+                          className={`px-1.5 py-0.5 rounded text-[7px] font-mono cursor-pointer transition-all ${
+                            activeTestTab === "passed" ? "bg-[#10b981] text-white" : "text-neutral-400 hover:text-neutral-200"
+                          }`}
+                        >
+                          Pass
+                        </button>
+                        <button
+                          onClick={() => setActiveTestTab("failed")}
+                          className={`px-1.5 py-0.5 rounded text-[7px] font-mono cursor-pointer transition-all ${
+                            activeTestTab === "failed" ? "bg-[#ef4444] text-white" : "text-neutral-400 hover:text-neutral-200"
+                          }`}
+                        >
+                          Fail
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-0.5">
+                      {testResults.tests.tests
+                        .filter((t: any) => {
+                          if (activeTestTab === "passed") return t.status === "passed";
+                          if (activeTestTab === "failed") return t.status !== "passed";
+                          return true;
+                        })
+                        .map((test: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className={`p-2 rounded-lg border flex items-center justify-between transition-all bg-[#0a0a0c]/40 ${
+                              test.status === "passed"
+                                ? "border-[#2c2d30] hover:border-[#10b981]/30"
+                                : "border-[#ef4444]/30 hover:border-[#ef4444]/60 bg-[#ef4444]/5"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} className="text-neutral-500 shrink-0">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                              </svg>
+                              <span className="text-neutral-300 font-bold truncate text-[8px] tracking-tight" title={test.name}>
+                                {test.name.split(" ")[0]}
+                              </span>
+                            </div>
+                            
+                            <span
+                              className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded tracking-widest shrink-0 ${
+                                test.status === "passed"
+                                  ? "bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/25"
+                                  : "bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/25 animate-pulse"
+                              }`}
+                            >
+                              {test.status === "passed" ? "PASS" : "FAIL"}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Logs Console Output */}
+                <div className="flex flex-col gap-1.5 border-t border-[#2b2b2b]/60 pt-3.5">
+                  <span className="text-[8px] font-black text-neutral-500 uppercase tracking-widest px-0.5">
+                    Captured Output Logs
+                  </span>
+                  
+                  <div className="bg-[#0a0a0c] border border-[#2b2b2b] p-3 rounded-lg font-mono text-[8px] text-[#ccd0d8] leading-relaxed max-h-36 overflow-y-auto custom-scrollbar select-text selection:bg-[#3279F9]/25 shadow-inner">
+                    {testResults && testResults.tests?.logs ? (
+                      <pre className="whitespace-pre-wrap">{testResults.tests.logs}</pre>
+                    ) : testResults && !testResults.tsc?.success ? (
+                      <div className="flex flex-col gap-1.5 text-[#ef4444]">
+                        <p className="font-bold">❌ TypeScript compilation error in frontend page:</p>
+                        <pre className="whitespace-pre-wrap opacity-90">{testResults.tsc.error}</pre>
+                      </div>
+                    ) : testResults && !testResults.ast?.success ? (
+                      <div className="flex flex-col gap-1.5 text-[#ef4444]">
+                        <p className="font-bold">❌ Python AST syntax evaluation error:</p>
+                        {testResults.ast.errors.map((e: any, idx: number) => (
+                          <div key={idx} className="border-b border-[#ef4444]/10 pb-1.5">
+                            <p className="font-semibold text-neutral-300">{e.file}</p>
+                            <pre className="whitespace-pre-wrap opacity-90">{e.error}</pre>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-neutral-600 block italic font-sans">Diagnostics console empty. Perform a self-test run to view stdio buffers and tracebacks.</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Legacy launch options as sub-options */}
+                <div className="flex flex-col gap-2.5 border-t border-[#2b2b2b]/50 pt-3">
+                  <span className="text-[8px] font-black text-neutral-600 uppercase tracking-widest px-0.5">Debugger Utilities</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        const url = prompt("Enter URL to debug:", "http://localhost:3000");
+                        if (url) {
+                          addLog({ type: "system", message: `🐞 [Debugger]: Listening on headless debugging stream for target ${url}` });
+                        }
+                      }}
+                      className="flex-1 bg-[#1e293b]/50 hover:bg-[#1e293b] border border-neutral-800 hover:border-neutral-700 text-neutral-400 hover:text-neutral-200 rounded py-1.5 font-bold font-mono tracking-wider active:scale-[0.98] transition-all text-center"
+                    >
+                      Debug URL
+                    </button>
+                    <button
+                      onClick={() => {
+                        addLog({ type: "system", message: "🐞 [Debugger]: Spawned dedicated JavaScript Debug Session." });
+                      }}
+                      className="flex-1 bg-[#1e293b]/50 hover:bg-[#1e293b] border border-neutral-800 hover:border-neutral-700 text-neutral-400 hover:text-neutral-200 rounded py-1.5 font-bold font-mono tracking-wider active:scale-[0.98] transition-all text-center"
+                    >
+                      JS Debug Shell
+                    </button>
+                  </div>
                 </div>
 
               </div>
@@ -2315,7 +2551,7 @@ Automated & Manual Testing
                         <span className="text-amber-400 font-bold">🪄 corrected: {previewOutput.typos_corrected.join(", ")}</span>
                       )}
                       <span className="text-indigo-400 font-bold">🔮 Expanded Prompt:</span>
-                      <p className="text-neutral-400 bg-[#040810] p-1.5 border border-[#2b2b2b] rounded select-text">{previewOutput.expanded}</p>
+                      <p className="text-neutral-400 bg-[#2d2d30] p-1.5 border border-[#2b2b2b] rounded select-text">{previewOutput.expanded}</p>
                     </div>
                   )}
                 </div>
@@ -2471,7 +2707,7 @@ Automated & Manual Testing
                 </div>
 
                 {ocrText && (
-                  <div className="bg-[#03070E] border border-[#3c3c3c] rounded-xl p-3 text-[9px] font-mono text-neutral-500 leading-normal max-h-48 overflow-y-auto custom-scrollbar">
+                  <div className="bg-[#1e1e1e] border border-[#3c3c3c] rounded-xl p-3 text-[9px] font-mono text-neutral-500 leading-normal max-h-48 overflow-y-auto custom-scrollbar">
                     <span className="text-[#3279F9] font-extrabold uppercase">OCR Output Capture:</span>
                     <p className="mt-1 select-text">{ocrText}</p>
                   </div>
@@ -2516,7 +2752,7 @@ Automated & Manual Testing
                             className={`group relative overflow-hidden rounded-xl border p-3 cursor-pointer transition-all duration-300 flex flex-col gap-2 select-none active:scale-[0.98] ${
                               isActive
                                 ? "bg-[#252526]/90 border-[#3279F9] shadow-[0_0_20px_rgba(50,121,249,0.15)] bg-gradient-to-br from-[#090A0D]/90 to-[#0e1726]/40"
-                                : "bg-[#252526]/60 border-[#3c3c3c] hover:border-neutral-700 hover:bg-[#0c0d12]/80"
+                                : "bg-[#252526]/60 border-[#3c3c3c] hover:border-neutral-700 hover:bg-[#1e1e1e]/80"
                             }`}
                           >
                             {/* Top row: Agent Name, active dot + badge */}
@@ -2847,7 +3083,7 @@ Automated & Manual Testing
                   className={`h-7 px-3.5 rounded-full mr-2 flex items-center gap-2 cursor-pointer text-[10.5px] font-mono transition-all duration-300 select-none ${
                     isActive
                       ? "bg-[#0d121f] text-[#3279F9] font-bold border border-[#3279F9]/40 shadow-[0_0_12px_rgba(50,121,249,0.12)]"
-                      : "bg-[#0B0E14]/30 border border-transparent text-[#5F7E97] hover:bg-[#0B0E14]/70 hover:text-neutral-200"
+                      : "bg-[#252526]/30 border border-transparent text-[#5F7E97] hover:bg-[#252526]/70 hover:text-neutral-200"
                   } ${isUnsaved ? "border-amber-500/50 text-amber-400 font-medium" : ""}`}
                 >
                   <span className="text-[11px]">{fileIcon}</span>
@@ -2892,7 +3128,7 @@ Automated & Manual Testing
                     </button>
                     
                     {/* Review dropdown & Proceed button */}
-                    <div className="flex items-center bg-[#0d1527] border border-indigo-900/40 rounded-lg overflow-hidden p-0.5">
+                    <div className="flex items-center bg-[#2d2d30] border border-indigo-900/40 rounded-lg overflow-hidden p-0.5">
                       <button className="px-2.5 py-1 text-[10px] font-mono font-bold text-[#3279F9] hover:bg-indigo-950/40 transition-colors flex items-center gap-1.5">
                         <span className="text-emerald-400">✓</span> Review
                       </button>
@@ -3081,17 +3317,17 @@ Automated & Manual Testing
                 
                 {/* Visual Welcome shortcuts with 3D mechanical keycaps */}
                 <div className="mt-8 flex flex-col gap-4 max-w-sm w-full font-mono text-[10px]">
-                  <div className="flex items-center justify-between bg-[#252526]/50 border border-[#1b1c24]/50 px-4 py-3 rounded-lg hover:border-neutral-800 transition-colors">
+                  <div className="flex items-center justify-between bg-[#252526]/50 border border-[#3c3c3c]/70 px-4 py-3 rounded-lg hover:border-neutral-800 transition-colors">
                     <span className="text-neutral-400 font-bold">Code with Swarm Agent</span>
                     <button
                       onClick={() => promptInputRef.current?.focus()}
-                      className="bg-indigo-950/40 border border-[#1b1c24]/50 hover:bg-indigo-900/30 text-indigo-400 font-bold px-3 py-1 rounded shadow-inner transition-all hover:scale-[1.02]"
+                      className="bg-indigo-950/40 border border-[#3c3c3c]/70 hover:bg-indigo-900/30 text-indigo-400 font-bold px-3 py-1 rounded shadow-inner transition-all hover:scale-[1.02]"
                     >
                       Code with Agent
                     </button>
                   </div>
                   
-                  <div className="flex items-center justify-between bg-[#252526]/50 border border-[#1b1c24]/50 px-4 py-3 rounded-lg hover:border-neutral-800 transition-colors">
+                  <div className="flex items-center justify-between bg-[#252526]/50 border border-[#3c3c3c]/70 px-4 py-3 rounded-lg hover:border-neutral-800 transition-colors">
                     <span className="text-neutral-400 font-bold">Focus Swarm Command Panel</span>
                     <div className="flex items-center gap-1.5 select-none pr-1">
                       <kbd className="keycap">Ctrl</kbd>
@@ -3311,7 +3547,7 @@ Automated & Manual Testing
                             <div className="w-5 h-5 rounded-full bg-indigo-950/50 border border-indigo-900/40 flex items-center justify-center font-bold text-[8px] text-[#00d8ff] shrink-0 font-mono select-none">
                               N
                             </div>
-                            <div className="text-[10px] font-mono text-[#C9D1D9] leading-relaxed whitespace-pre-line bg-[#0D111A]/80 border border-[#162030]/80 rounded-2xl rounded-tl-none px-3.5 py-2 shadow-sm">
+                            <div className="text-[10px] font-mono text-[#C9D1D9] leading-relaxed whitespace-pre-line bg-[#2d2d30]/80 border border-[#3c3c3c]/80 rounded-2xl rounded-tl-none px-3.5 py-2 shadow-sm">
                               {msg.content}
                             </div>
                           </div>
@@ -3446,7 +3682,7 @@ Automated & Manual Testing
               <form onSubmit={handleStartTask} className="flex flex-col gap-2.5 pt-3 border-t border-[#2b2b2b] bg-[#252526]/60 select-none">
                 
                 {/* Horizontal Files Review / Accept Bar matching screenshot perfectly */}
-                <div className="flex items-center justify-between bg-[#040810]/60 border border-[#2b2b2b]/60 rounded-xl px-3 py-2 text-[9px] font-mono">
+                <div className="flex items-center justify-between bg-[#2d2d30]/60 border border-[#2b2b2b]/60 rounded-xl px-3 py-2 text-[9px] font-mono">
                   {gitStatus.modified_files.length > 0 ? (
                     <>
                       <div className="flex items-center gap-1.5 text-neutral-400">

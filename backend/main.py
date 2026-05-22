@@ -605,6 +605,252 @@ async def run_desktop_automation(request: Request):
     })
     return JSONResponse(content=res)
 
+# ───────────────────────────────────────────────────────────────
+# SELF-TESTING & SYSTEM DIAGNOSTICS ENDPOINTS
+# ───────────────────────────────────────────────────────────────
+
+import io
+import time
+import ast
+import unittest
+import subprocess
+
+class StructuredTestResult(unittest.TextTestResult):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.results = []
+
+    def addSuccess(self, test):
+        super().addSuccess(test)
+        self.results.append({
+            "name": str(test),
+            "status": "passed",
+            "message": ""
+        })
+
+    def addFailure(self, test, err):
+        super().addFailure(test, err)
+        self.results.append({
+            "name": str(test),
+            "status": "failed",
+            "message": self._exc_info_to_string(err, test)
+        })
+
+    def addError(self, test, err):
+        super().addError(test, err)
+        self.results.append({
+            "name": str(test),
+            "status": "error",
+            "message": self._exc_info_to_string(err, test)
+        })
+
+@app.post("/api/test/run")
+async def run_self_tests(request: Request):
+    """
+    Triggers the multi-faceted Self-Testing suite:
+    1. Python AST parsing sanity on all core backend modules.
+    2. Frontend TypeScript types compilation validation.
+    3. Programmatic workspace unittests discovery & execution.
+    """
+    await websocket_manager.broadcast({
+        "type": "system",
+        "message": "🚀 [Self-Tester]: Initiating full system self-testing sequence..."
+    })
+    
+    # 1. Python Backend AST validation
+    await websocket_manager.broadcast({
+        "type": "system",
+        "message": "🔍 [Self-Tester]: Scanning backend Python files for AST syntax integrity..."
+    })
+    
+    ast_passed = True
+    ast_errors = []
+    backend_dir = os.path.abspath(os.path.join(os.getcwd(), "backend"))
+    try:
+        for root, _, files in os.walk(backend_dir):
+            for file in files:
+                if file.endswith(".py"):
+                    filepath = os.path.join(root, file)
+                    try:
+                        with open(filepath, "r", encoding="utf-8") as f:
+                            ast.parse(f.read())
+                    except Exception as e:
+                        ast_passed = False
+                        ast_errors.append({
+                            "file": os.path.relpath(filepath, os.getcwd()).replace("\\", "/"),
+                            "error": str(e)
+                        })
+    except Exception as e:
+        ast_passed = False
+        ast_errors.append({"file": "backend_root", "error": str(e)})
+
+    # 2. Frontend TS check
+    await websocket_manager.broadcast({
+        "type": "system",
+        "message": "🔍 [Self-Tester]: Compiling React frontend models (npx tsc)..."
+    })
+    
+    tsc_passed = True
+    tsc_error = ""
+    mobile_dir = os.path.abspath(os.path.join(os.getcwd(), "mobile"))
+    if os.path.exists(mobile_dir):
+        try:
+            tsc_res = await asyncio.to_thread(
+                subprocess.run,
+                "npx tsc --noEmit",
+                shell=True,
+                cwd=mobile_dir,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if tsc_res.returncode != 0:
+                tsc_passed = False
+                tsc_error = tsc_res.stderr or tsc_res.stdout
+        except Exception as e:
+            tsc_passed = False
+            tsc_error = str(e)
+    else:
+        tsc_passed = False
+        tsc_error = "mobile/ directory not found"
+
+    # 3. Discover and run Python unittests in the workspace
+    await websocket_manager.broadcast({
+        "type": "system",
+        "message": "🔍 [Self-Tester]: Running workspace unit test suites..."
+    })
+    
+    def run_tests_sync():
+        loader = unittest.TestLoader()
+        suite = loader.discover(start_dir=WORKSPACE_DIR, pattern="test_*.py")
+        stream = io.StringIO()
+        runner = unittest.TextTestRunner(stream=stream, resultclass=StructuredTestResult, verbosity=2)
+        
+        start_t = time.time()
+        res = runner.run(suite)
+        duration = time.time() - start_t
+        
+        test_cases = getattr(res, "results", [])
+        total = res.testsRun
+        failed = len(res.failures) + len(res.errors)
+        passed = total - failed
+        
+        stream.seek(0)
+        logs = stream.read()
+        return {
+            "total": total,
+            "passed": passed,
+            "failed": failed,
+            "duration": round(duration, 3),
+            "tests": test_cases,
+            "logs": logs
+        }
+        
+    try:
+        test_res = await asyncio.to_thread(run_tests_sync)
+    except Exception as e:
+        test_res = {
+            "total": 0,
+            "passed": 0,
+            "failed": 1,
+            "duration": 0.0,
+            "tests": [{"name": "discover_tests", "status": "failed", "message": str(e)}],
+            "logs": f"Discovery/execution error: {e}"
+        }
+
+    # Combined summary
+    total_passed = ast_passed and tsc_passed and (test_res["failed"] == 0)
+    
+    # Save the run outcome to sqlite database log
+    try:
+        import sqlite3
+        conn = sqlite3.connect(os.path.join(os.getcwd(), "db.sqlite3"))
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS agent_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                agent_name TEXT,
+                action TEXT,
+                result TEXT,
+                phase TEXT
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO agent_logs (agent_name, action, result, phase)
+            VALUES (?, ?, ?, ?)
+        """, (
+            "Self-Tester",
+            "Interactive full self-test execution",
+            f"AST: {'OK' if ast_passed else 'FAIL'}, TS: {'OK' if tsc_passed else 'FAIL'}, Tests: {test_res['passed']}/{test_res['total']} Passed",
+            "testing"
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as dberr:
+        print(f"Failed to record self-test in database logs: {dberr}")
+
+    message_str = f"🏁 [Self-Tester]: Self-testing completed! Result: {'✅ PASSED' if total_passed else '❌ FAILED'}. {test_res['passed']}/{test_res['total']} Tests OK."
+    await websocket_manager.broadcast({
+        "type": "system",
+        "message": message_str
+    })
+    
+    import json
+    return JSONResponse(content={
+        "success": total_passed,
+        "ast": {
+            "success": ast_passed,
+            "errors": ast_errors
+        },
+        "tsc": {
+            "success": tsc_passed,
+            "error": tsc_error
+        },
+        "tests": test_res
+    })
+
+@app.get("/api/test/status")
+async def get_test_status():
+    """Retrieves the latest self-testing and build history from the SQLite database."""
+    import sqlite3
+    import json
+    db_path = os.path.join(os.getcwd(), "db.sqlite3")
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Query latest 10 test phase agent logs
+        cursor.execute("""
+            SELECT id, timestamp, agent_name, action, result, phase 
+            FROM agent_logs 
+            WHERE phase = 'testing' OR agent_name = 'Self-Tester' OR agent_name = 'CI_Swarm'
+            ORDER BY id DESC LIMIT 10
+        """)
+        rows = cursor.fetchall()
+        history = [dict(row) for row in rows]
+        
+        # Query active build states if any
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='build_state'")
+        has_build_table = cursor.fetchone() is not None
+        build_state = {}
+        if has_build_table:
+            cursor.execute("SELECT phase, status, files_json FROM build_state")
+            for row in cursor.fetchall():
+                build_state[row["phase"]] = {
+                    "status": row["status"],
+                    "data": json.loads(row["files_json"]) if row["files_json"] else {}
+                }
+        
+        conn.close()
+        return JSONResponse(content={
+            "history": history,
+            "build_state": build_state
+        })
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": f"Database read error: {e}"})
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
